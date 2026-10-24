@@ -1,44 +1,82 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { calculateGSTInvoice, LineItemInput, CalculationOptions, InvoiceCalculationResult } from "./gst";
 
-const DATA_DIR = path.join(process.cwd(), ".lensart_data");
+// In serverless environments (e.g. Vercel, AWS Lambda), process.cwd() is read-only (/var/task).
+// Use os.tmpdir() where writable storage is guaranteed.
+function resolveDataDir(): string {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join(os.tmpdir(), ".lensart_data");
+  }
+  try {
+    const localDir = path.join(process.cwd(), ".lensart_data");
+    if (!fs.existsSync(localDir)) {
+      fs.mkdirSync(localDir, { recursive: true });
+    }
+    return localDir;
+  } catch {
+    return path.join(os.tmpdir(), ".lensart_data");
+  }
+}
+
+const DATA_DIR = resolveDataDir();
+const memoryStore = new Map<string, unknown>();
 
 function ensureDirectoryExists(dir: string) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch {
+    // If directory creation fails, memoryStore gracefully handles reads & writes
   }
 }
 
 function getFilePath(collection: string): string {
-  ensureDirectoryExists(DATA_DIR);
-  return path.join(DATA_DIR, `${collection}.json`);
+  try {
+    ensureDirectoryExists(DATA_DIR);
+    return path.join(DATA_DIR, `${collection}.json`);
+  } catch {
+    return "";
+  }
 }
 
 export function readCollection<T>(collection: string, defaultData: T[] = []): T[] {
   try {
+    if (memoryStore.has(collection)) {
+      return memoryStore.get(collection) as T[];
+    }
     const filePath = getFilePath(collection);
-    if (!fs.existsSync(filePath)) {
+    if (!filePath || !fs.existsSync(filePath)) {
+      memoryStore.set(collection, defaultData);
       writeCollection(collection, defaultData);
       return defaultData;
     }
     const content = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(content);
-    if (Array.isArray(parsed)) return parsed as T[];
-    if (parsed && typeof parsed === "object") return [parsed] as unknown as T[];
-    return defaultData;
+    const result = Array.isArray(parsed)
+      ? (parsed as T[])
+      : parsed && typeof parsed === "object"
+      ? ([parsed] as unknown as T[])
+      : defaultData;
+    memoryStore.set(collection, result);
+    return result;
   } catch (err) {
-    console.error(`Error reading collection ${collection}:`, err);
-    return defaultData;
+    console.warn(`Reading ${collection} falling back to memory store:`, err);
+    return (memoryStore.get(collection) as T[]) || defaultData;
   }
 }
 
 export function writeCollection<T>(collection: string, data: T[]): void {
+  memoryStore.set(collection, data);
   try {
     const filePath = getFilePath(collection);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+    if (filePath) {
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+    }
   } catch (err) {
-    console.error(`Error writing collection ${collection}:`, err);
+    // Memory store retains the update even if filesystem is read-only
   }
 }
 
@@ -409,9 +447,9 @@ export function initializeStoreIfEmpty() {
   ensureDirectoryExists(DATA_DIR);
 
   // 1. Business Settings
-  const settingsFile = getFilePath("business_settings");
-  if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(settingsFile, JSON.stringify(getInitialBusinessSettings(), null, 2));
+  const existingSettings = readCollection<BusinessSettings>("business_settings", []);
+  if (existingSettings.length === 0) {
+    writeCollection("business_settings", [getInitialBusinessSettings()]);
   }
 
   // 2. Initial Products
