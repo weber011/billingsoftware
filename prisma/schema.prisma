@@ -1,0 +1,903 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// BUSINESS & BRANCH
+// ============================================================================
+
+model Business {
+  id                String   @id @default(cuid())
+  name              String
+  legalName         String?
+  address           String?
+  city              String?
+  state             String?
+  stateCode         String?
+  pinCode           String?
+  phone             String?
+  email             String?
+  gstin             String?
+  isGstRegistered   Boolean  @default(false)
+  logoUrl           String?
+  invoicePrefix     String   @default("INV")
+  invoiceNextNumber Int      @default(1)
+  financialYearStart Int     @default(4) // Month number (4 = April)
+  defaultPaymentMethods String[] @default(["CASH", "UPI", "CARD", "BANK_TRANSFER"])
+  invoiceFooter     String?
+  returnPolicy      String?
+  warrantyPolicy    String?
+  termsAndConditions String?
+  signatory         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  branches          Branch[]
+  taxConfigurations TaxConfiguration[]
+}
+
+model Branch {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  address    String?
+  city       String?
+  state      String?
+  stateCode  String?
+  pinCode    String?
+  phone      String?
+  email      String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business   Business @relation(fields: [businessId], references: [id])
+  users      User[]
+  invoices   Invoice[]
+  orders     OpticalOrder[]
+
+  @@index([businessId])
+}
+
+// ============================================================================
+// AUTH: USERS, ROLES, PERMISSIONS
+// ============================================================================
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  phone          String?
+  passwordHash   String
+  isActive       Boolean   @default(true)
+  branchId       String?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  branch         Branch?   @relation(fields: [branchId], references: [id])
+  userRoles      UserRole[]
+  auditLogs      AuditLog[]
+  prescriptions  Prescription[] @relation("PrescriptionCreatedBy")
+  invoicesCreated Invoice[]     @relation("InvoiceCreatedBy")
+  payments       Payment[]
+  orderAssignments OpticalOrder[] @relation("OrderAssignedTo")
+
+  @@index([branchId])
+  @@index([email])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  displayName String
+  description String?
+  isSystem    Boolean  @default(false) // System roles can't be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRoles   UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  module      String   // e.g., "billing", "patients", "inventory"
+  action      String   // e.g., "create", "read", "update", "delete"
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles       RolePermission[]
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  id           String   @id @default(cuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+// ============================================================================
+// CUSTOMERS / PATIENTS
+// ============================================================================
+
+model Customer {
+  id             String    @id @default(cuid())
+  customerCode   String    @unique // e.g., "PT-0001"
+  name           String
+  phone          String?
+  email          String?
+  dateOfBirth    DateTime?
+  address        String?
+  city           String?
+  state          String?
+  pinCode        String?
+  gstin          String?
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  prescriptions  Prescription[]
+  orders         OpticalOrder[]
+  invoices       Invoice[]
+  payments       Payment[]
+  quotations     Quotation[]
+  customerNotes  CustomerNote[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([customerCode])
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  customerId String
+  note       String
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+}
+
+// ============================================================================
+// PRESCRIPTIONS
+// ============================================================================
+
+model Prescription {
+  id                   String    @id @default(cuid())
+  prescriptionCode     String    @unique // e.g., "RX-0001"
+  customerId           String
+  examinationDate      DateTime
+  prescribedBy         String?   // Doctor/optometrist name
+  prescriptionType     String    @default("SPECTACLE") // SPECTACLE, CONTACT_LENS, BOTH
+
+  // Right Eye
+  rightSph             Decimal?  @db.Decimal(6, 2)
+  rightCyl             Decimal?  @db.Decimal(6, 2)
+  rightAxis            Int?
+  rightAdd             Decimal?  @db.Decimal(6, 2)
+  rightVa              String?   // Visual acuity e.g., "6/6"
+  rightPrism           Decimal?  @db.Decimal(6, 2)
+  rightBase            String?
+
+  // Left Eye
+  leftSph              Decimal?  @db.Decimal(6, 2)
+  leftCyl              Decimal?  @db.Decimal(6, 2)
+  leftAxis             Int?
+  leftAdd              Decimal?  @db.Decimal(6, 2)
+  leftVa               String?
+  leftPrism            Decimal?  @db.Decimal(6, 2)
+  leftBase             String?
+
+  // Additional
+  pd                   Decimal?  @db.Decimal(5, 1) // Pupillary distance
+  pdRight              Decimal?  @db.Decimal(5, 1) // Monocular PD
+  pdLeft               Decimal?  @db.Decimal(5, 1)
+  nearVisionDetails    String?
+  distanceVisionDetails String?
+  lensRecommendation   String?
+  notes                String?
+  nextExaminationDate  DateTime?
+
+  createdById          String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  customer             Customer  @relation(fields: [customerId], references: [id])
+  createdBy            User      @relation("PrescriptionCreatedBy", fields: [createdById], references: [id])
+  attachments          PrescriptionAttachment[]
+  orders               OpticalOrder[]
+
+  @@index([customerId])
+  @@index([examinationDate])
+}
+
+model PrescriptionAttachment {
+  id              String   @id @default(cuid())
+  prescriptionId  String
+  fileName        String
+  filePath        String
+  mimeType        String
+  fileSize        Int
+  createdAt       DateTime @default(now())
+
+  prescription    Prescription @relation(fields: [prescriptionId], references: [id])
+
+  @@index([prescriptionId])
+}
+
+// ============================================================================
+// PRODUCTS & INVENTORY
+// ============================================================================
+
+model ProductCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  parentId    String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent      ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    ProductCategory[] @relation("CategoryTree")
+  products    Product[]
+
+  @@index([parentId])
+}
+
+model Product {
+  id                String    @id @default(cuid())
+  sku               String    @unique
+  name              String
+  description       String?
+  categoryId        String
+  brand             String?
+  model             String?
+  barcode           String?   @unique
+  supplierId        String?
+  purchaseCost      Decimal   @db.Decimal(12, 2)
+  sellingPrice      Decimal   @db.Decimal(12, 2)
+  taxClassificationId String?
+  hsnCode           String?
+  isActive          Boolean   @default(true)
+  trackInventory    Boolean   @default(true)
+  reorderThreshold  Int       @default(5)
+  currentStock      Int       @default(0)
+
+  // Frame-specific
+  frameShape        String?
+  frameMaterial     String?
+  frameColor        String?
+  eyeSize           String?
+  bridgeSize        String?
+  templeLength      String?
+  frameStyle        String?   // Unisex, etc.
+
+  // Lens-specific
+  lensType          String?   // Single Vision, Bifocal, Progressive
+  lensMaterial      String?   // CR-39, Polycarbonate, etc.
+  refractiveIndex   String?
+  lensCoating       String?
+  isPhotochromic    Boolean?
+  isBlueFilter      Boolean?
+  powerRangeMin     Decimal?  @db.Decimal(6, 2)
+  powerRangeMax     Decimal?  @db.Decimal(6, 2)
+
+  // Contact Lens specific
+  contactLensDuration String?  // Daily, Monthly, etc.
+  baseCurve         String?
+  diameter          String?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  category          ProductCategory @relation(fields: [categoryId], references: [id])
+  supplier          Supplier?       @relation(fields: [supplierId], references: [id])
+  taxClassification TaxConfiguration? @relation(fields: [taxClassificationId], references: [id])
+  variants          ProductVariant[]
+  inventoryMovements InventoryMovement[]
+  invoiceItems      InvoiceItem[]
+  orderItems        OpticalOrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([sku])
+  @@index([barcode])
+  @@index([name])
+  @@index([brand])
+}
+
+model ProductVariant {
+  id            String   @id @default(cuid())
+  productId     String
+  sku           String   @unique
+  name          String   // e.g., "Black - Medium"
+  barcode       String?  @unique
+  additionalCost Decimal @default(0) @db.Decimal(12, 2)
+  additionalPrice Decimal @default(0) @db.Decimal(12, 2)
+  currentStock  Int      @default(0)
+  isActive      Boolean  @default(true)
+  attributes    Json?    // { color: "Black", size: "Medium" }
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product       Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+// ============================================================================
+// TAX CONFIGURATION
+// ============================================================================
+
+model TaxConfiguration {
+  id               String    @id @default(cuid())
+  businessId       String
+  hsnCode          String
+  description      String
+  productCategory  String?   // Which product type this applies to
+  gstRate          Decimal   @db.Decimal(5, 2) // e.g., 12.00, 18.00
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  isVerified       Boolean   @default(false) // Must be reviewed by GST professional
+  verificationNote String?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  business         Business  @relation(fields: [businessId], references: [id])
+  products         Product[]
+
+  @@index([businessId])
+  @@index([hsnCode])
+}
+
+// ============================================================================
+// SUPPLIERS
+// ============================================================================
+
+model Supplier {
+  id            String   @id @default(cuid())
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  city          String?
+  state         String?
+  gstin         String?
+  paymentTerms  String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  products      Product[]
+  purchaseOrders PurchaseOrder[]
+
+  @@index([name])
+}
+
+// ============================================================================
+// PURCHASE MANAGEMENT
+// ============================================================================
+
+model PurchaseOrder {
+  id                String   @id @default(cuid())
+  poNumber          String   @unique
+  supplierId        String
+  orderDate         DateTime
+  expectedDelivery  DateTime?
+  status            String   @default("DRAFT") // DRAFT, ORDERED, PARTIAL_RECEIVED, RECEIVED, CANCELLED
+  totalAmount       Decimal  @default(0) @db.Decimal(14, 2)
+  taxAmount         Decimal  @default(0) @db.Decimal(14, 2)
+  notes             String?
+  supplierInvoiceRef String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  supplier          Supplier @relation(fields: [supplierId], references: [id])
+  items             PurchaseOrderItem[]
+  goodsReceipts     GoodsReceipt[]
+
+  @@index([supplierId])
+  @@index([status])
+}
+
+model PurchaseOrderItem {
+  id               String   @id @default(cuid())
+  purchaseOrderId  String
+  productId        String
+  quantity         Int
+  unitCost         Decimal  @db.Decimal(12, 2)
+  taxRate          Decimal  @default(0) @db.Decimal(5, 2)
+  totalAmount      Decimal  @db.Decimal(14, 2)
+  receivedQuantity Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  product          Product       @relation(fields: [productId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model GoodsReceipt {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  receiptDate     DateTime
+  receivedBy      String
+  notes           String?
+  items           Json     // Array of { productId, quantityReceived, quantityDamaged, notes }
+  createdAt       DateTime @default(now())
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  @@index([purchaseOrderId])
+}
+
+// ============================================================================
+// INVENTORY MOVEMENTS
+// ============================================================================
+
+model InventoryMovement {
+  id            String   @id @default(cuid())
+  productId     String
+  movementType  String   // PURCHASE_IN, SALE_OUT, ADJUSTMENT, RETURN_IN, RETURN_OUT, TRANSFER, INITIAL
+  quantity      Int      // Positive for IN, negative for OUT
+  previousStock Int
+  newStock      Int
+  referenceType String?  // INVOICE, PURCHASE_ORDER, ADJUSTMENT, RETURN, etc.
+  referenceId   String?  // ID of the related document
+  reason        String?
+  performedBy   String
+  createdAt     DateTime @default(now())
+
+  product       Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([movementType])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// OPTICAL ORDERS
+// ============================================================================
+
+model OpticalOrder {
+  id                  String   @id @default(cuid())
+  orderNumber         String   @unique
+  customerId          String
+  prescriptionId      String?
+  branchId            String
+  orderDate           DateTime @default(now())
+  expectedCompletionDate DateTime?
+  status              String   @default("ORDER_CONFIRMED")
+  assignedToId        String?
+  labInfo             String?
+  fittingDetails      String?
+
+  // Prescription snapshot (immutable copy at order time)
+  prescriptionSnapshot Json?
+
+  // Payment tracking
+  totalAmount         Decimal  @default(0) @db.Decimal(14, 2)
+  advancePaid         Decimal  @default(0) @db.Decimal(14, 2)
+  balanceDue          Decimal  @default(0) @db.Decimal(14, 2)
+
+  internalNotes       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  customer            Customer  @relation(fields: [customerId], references: [id])
+  prescription        Prescription? @relation(fields: [prescriptionId], references: [id])
+  branch              Branch    @relation(fields: [branchId], references: [id])
+  assignedTo          User?     @relation("OrderAssignedTo", fields: [assignedToId], references: [id])
+  items               OpticalOrderItem[]
+  statusHistory       OrderStatusHistory[]
+  invoices            Invoice[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([orderDate])
+  @@index([branchId])
+}
+
+model OpticalOrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String?
+  description String
+  itemType    String   // FRAME, LENS, ACCESSORY, SERVICE, OTHER
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  discount    Decimal  @default(0) @db.Decimal(12, 2)
+  totalPrice  Decimal  @db.Decimal(14, 2)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  order       OpticalOrder @relation(fields: [orderId], references: [id])
+  product     Product?     @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model OrderStatusHistory {
+  id        String   @id @default(cuid())
+  orderId   String
+  status    String
+  notes     String?
+  changedBy String
+  createdAt DateTime @default(now())
+
+  order     OpticalOrder @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// INVOICES
+// ============================================================================
+
+model Invoice {
+  id                String   @id @default(cuid())
+  invoiceNumber     String   @unique
+  invoiceDate       DateTime
+  customerId        String
+  orderId           String?
+  branchId          String
+  status            String   @default("DRAFT") // DRAFT, FINALIZED, CANCELLED
+
+  // Business snapshot
+  businessName      String
+  businessAddress   String?
+  businessGstin     String?
+  businessState     String?
+  businessStateCode String?
+
+  // Customer snapshot
+  customerName      String
+  customerPhone     String?
+  customerAddress   String?
+  customerGstin     String?
+  customerState     String?
+
+  // Supply details
+  placeOfSupply     String?
+  placeOfSupplyCode String?
+  isInterState      Boolean  @default(false)
+
+  // Totals
+  subtotal          Decimal  @db.Decimal(14, 2)
+  discountAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  taxableAmount     Decimal  @db.Decimal(14, 2)
+  cgstTotal         Decimal  @default(0) @db.Decimal(14, 2)
+  sgstTotal         Decimal  @default(0) @db.Decimal(14, 2)
+  igstTotal         Decimal  @default(0) @db.Decimal(14, 2)
+  totalTax          Decimal  @db.Decimal(14, 2)
+  grandTotal        Decimal  @db.Decimal(14, 2)
+  roundOff          Decimal  @default(0) @db.Decimal(14, 2)
+  finalAmount       Decimal  @db.Decimal(14, 2)
+  amountPaid        Decimal  @default(0) @db.Decimal(14, 2)
+  balanceDue        Decimal  @default(0) @db.Decimal(14, 2)
+
+  // Pricing type
+  isTaxInclusive    Boolean  @default(false)
+
+  paymentTerms      String?
+  notes             String?
+  footer            String?
+  cancelReason      String?
+  cancelledAt       DateTime?
+  cancelledBy       String?
+  finalizedAt       DateTime?
+  finalizedBy       String?
+
+  createdById       String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer          Customer      @relation(fields: [customerId], references: [id])
+  order             OpticalOrder? @relation(fields: [orderId], references: [id])
+  branch            Branch        @relation(fields: [branchId], references: [id])
+  createdBy         User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  items             InvoiceItem[]
+  taxComponents     InvoiceTaxComponent[]
+  payments          Payment[]
+  creditNotes       CreditNote[]
+
+  @@index([customerId])
+  @@index([orderId])
+  @@index([branchId])
+  @@index([invoiceDate])
+  @@index([status])
+}
+
+model InvoiceItem {
+  id               String   @id @default(cuid())
+  invoiceId        String
+  productId        String?
+  itemOrder        Int      @default(0)
+
+  // Snapshot at time of invoice
+  description      String
+  hsnCode          String?
+  quantity         Int
+  unitPrice        Decimal  @db.Decimal(12, 2)
+  discount         Decimal  @default(0) @db.Decimal(12, 2)
+  discountPercent  Decimal  @default(0) @db.Decimal(5, 2)
+  taxableAmount    Decimal  @db.Decimal(14, 2)
+  gstRate          Decimal  @db.Decimal(5, 2)
+  cgstAmount       Decimal  @default(0) @db.Decimal(14, 2)
+  sgstAmount       Decimal  @default(0) @db.Decimal(14, 2)
+  igstAmount       Decimal  @default(0) @db.Decimal(14, 2)
+  totalAmount      Decimal  @db.Decimal(14, 2)
+
+  createdAt        DateTime @default(now())
+
+  invoice          Invoice  @relation(fields: [invoiceId], references: [id])
+  product          Product? @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+}
+
+model InvoiceTaxComponent {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  taxRate     Decimal  @db.Decimal(5, 2)
+  taxableAmount Decimal @db.Decimal(14, 2)
+  cgstRate    Decimal  @default(0) @db.Decimal(5, 2)
+  cgstAmount  Decimal  @default(0) @db.Decimal(14, 2)
+  sgstRate    Decimal  @default(0) @db.Decimal(5, 2)
+  sgstAmount  Decimal  @default(0) @db.Decimal(14, 2)
+  igstRate    Decimal  @default(0) @db.Decimal(5, 2)
+  igstAmount  Decimal  @default(0) @db.Decimal(14, 2)
+  totalTax    Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now())
+
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+model Payment {
+  id                String   @id @default(cuid())
+  paymentNumber     String   @unique
+  invoiceId         String
+  customerId        String
+  amount            Decimal  @db.Decimal(14, 2)
+  paymentMethod     String   // CASH, UPI, CARD, BANK_TRANSFER, OTHER
+  transactionRef    String?
+  paymentDate       DateTime
+  status            String   @default("COMPLETED") // COMPLETED, PENDING, FAILED, REVERSED
+  notes             String?
+  recordedById      String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  invoice           Invoice  @relation(fields: [invoiceId], references: [id])
+  customer          Customer @relation(fields: [customerId], references: [id])
+  recordedBy        User     @relation(fields: [recordedById], references: [id])
+  refunds           Refund[]
+
+  @@index([invoiceId])
+  @@index([customerId])
+  @@index([paymentDate])
+}
+
+// ============================================================================
+// CREDIT NOTES & REFUNDS
+// ============================================================================
+
+model CreditNote {
+  id               String   @id @default(cuid())
+  creditNoteNumber String   @unique
+  invoiceId        String
+  creditNoteDate   DateTime
+  reason           String
+  status           String   @default("ISSUED") // ISSUED, APPLIED, CANCELLED
+
+  // Items
+  subtotal         Decimal  @db.Decimal(14, 2)
+  taxAmount        Decimal  @db.Decimal(14, 2)
+  totalAmount      Decimal  @db.Decimal(14, 2)
+
+  createdBy        String
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  invoice          Invoice  @relation(fields: [invoiceId], references: [id])
+  items            CreditNoteItem[]
+  refunds          Refund[]
+
+  @@index([invoiceId])
+}
+
+model CreditNoteItem {
+  id             String   @id @default(cuid())
+  creditNoteId   String
+  description    String
+  hsnCode        String?
+  quantity       Int
+  unitPrice      Decimal  @db.Decimal(12, 2)
+  taxableAmount  Decimal  @db.Decimal(14, 2)
+  gstRate        Decimal  @db.Decimal(5, 2)
+  cgstAmount     Decimal  @default(0) @db.Decimal(14, 2)
+  sgstAmount     Decimal  @default(0) @db.Decimal(14, 2)
+  igstAmount     Decimal  @default(0) @db.Decimal(14, 2)
+  totalAmount    Decimal  @db.Decimal(14, 2)
+  returnReason   String?
+  itemCondition  String?  // GOOD, DAMAGED, DEFECTIVE
+  restockable    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  creditNote     CreditNote @relation(fields: [creditNoteId], references: [id])
+
+  @@index([creditNoteId])
+}
+
+model Refund {
+  id             String   @id @default(cuid())
+  refundNumber   String   @unique
+  creditNoteId   String?
+  paymentId      String?
+  amount         Decimal  @db.Decimal(14, 2)
+  refundMethod   String
+  refundDate     DateTime
+  transactionRef String?
+  reason         String
+  status         String   @default("PROCESSED") // PROCESSED, PENDING, FAILED
+  processedBy    String
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  creditNote     CreditNote? @relation(fields: [creditNoteId], references: [id])
+  payment        Payment?    @relation(fields: [paymentId], references: [id])
+
+  @@index([creditNoteId])
+  @@index([paymentId])
+}
+
+// ============================================================================
+// QUOTATIONS
+// ============================================================================
+
+model Quotation {
+  id              String   @id @default(cuid())
+  quotationNumber String   @unique
+  customerId      String
+  quotationDate   DateTime
+  validUntil      DateTime
+  status          String   @default("DRAFT") // DRAFT, SENT, ACCEPTED, EXPIRED, CONVERTED
+  subtotal        Decimal  @db.Decimal(14, 2)
+  discountAmount  Decimal  @default(0) @db.Decimal(14, 2)
+  taxAmount       Decimal  @db.Decimal(14, 2)
+  totalAmount     Decimal  @db.Decimal(14, 2)
+  notes           String?
+  convertedToInvoiceId String?
+  convertedToOrderId   String?
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  customer        Customer @relation(fields: [customerId], references: [id])
+  items           QuotationItem[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model QuotationItem {
+  id             String   @id @default(cuid())
+  quotationId    String
+  description    String
+  hsnCode        String?
+  quantity       Int
+  unitPrice      Decimal  @db.Decimal(12, 2)
+  discount       Decimal  @default(0) @db.Decimal(12, 2)
+  taxableAmount  Decimal  @db.Decimal(14, 2)
+  gstRate        Decimal  @db.Decimal(5, 2)
+  taxAmount      Decimal  @db.Decimal(14, 2)
+  totalAmount    Decimal  @db.Decimal(14, 2)
+  createdAt      DateTime @default(now())
+
+  quotation      Quotation @relation(fields: [quotationId], references: [id])
+
+  @@index([quotationId])
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id          String   @id @default(cuid())
+  type        String   // ORDER_READY, PAYMENT_REMINDER, LOW_STOCK, etc.
+  title       String
+  message     String
+  recipientId String?  // User ID or null for system-wide
+  customerId  String?  // Related customer
+  referenceType String? // ORDER, INVOICE, PRODUCT, etc.
+  referenceId String?
+  channel     String   @default("IN_APP") // IN_APP, EMAIL, SMS, WHATSAPP
+  status      String   @default("PENDING") // PENDING, SENT, DELIVERED, FAILED, READ
+  sentAt      DateTime?
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([recipientId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  eventType    String   // LOGIN, CREATE, UPDATE, DELETE, FINALIZE, CANCEL, etc.
+  module       String   // patients, invoices, inventory, etc.
+  recordType   String?  // Customer, Invoice, Product, etc.
+  recordId     String?
+  description  String
+  previousData Json?
+  newData      Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([module])
+  @@index([createdAt])
+  @@index([recordType, recordId])
+}
