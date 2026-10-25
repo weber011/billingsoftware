@@ -8,11 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createPrescription } from "@/actions/prescriptions";
-import { getPatients } from "@/actions/patients";
+import { getPatients, createPatient } from "@/actions/patients";
 import { Customer } from "@/lib/store";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ArrowLeft, Glasses, User } from "lucide-react";
+import { ArrowLeft, Glasses, User, UserPlus } from "lucide-react";
 
 function NewPrescriptionContent() {
   const router = useRouter();
@@ -22,6 +30,72 @@ function NewPrescriptionContent() {
   const [patients, setPatients] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState(customerIdParam || "");
   const [loading, setLoading] = useState(false);
+
+  // Quick Add Patient Modal state
+  const [newPatientOpen, setNewPatientOpen] = useState(false);
+  const [newPatientLoading, setNewPatientLoading] = useState(false);
+  const [newPatientForm, setNewPatientForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    city: "Ranchi",
+    state: "Jharkhand",
+    pinCode: "834001",
+    gstin: "",
+    notes: "",
+  });
+
+  const handleCreateNewPatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPatientForm.name.trim()) {
+      toast.error("Patient name is required");
+      return;
+    }
+    if (!newPatientForm.phone.trim()) {
+      toast.error("Phone number is required");
+      return;
+    }
+
+    setNewPatientLoading(true);
+    try {
+      const res = await createPatient({
+        name: newPatientForm.name.trim(),
+        phone: newPatientForm.phone.trim(),
+        email: newPatientForm.email?.trim() || undefined,
+        address: newPatientForm.address?.trim() || undefined,
+        city: newPatientForm.city?.trim() || "Ranchi",
+        state: newPatientForm.state?.trim() || "Jharkhand",
+        pinCode: newPatientForm.pinCode?.trim() || undefined,
+        gstin: newPatientForm.gstin?.trim() || undefined,
+        notes: newPatientForm.notes?.trim() || undefined,
+      });
+
+      if (res.success && res.patient) {
+        toast.success(`Patient ${res.patient.name} (${res.patient.customerCode}) saved to database!`);
+        setPatients((prev) => [res.patient as any, ...prev]);
+        setSelectedCustomerId(res.patient.id);
+        setNewPatientForm({
+          name: "",
+          phone: "",
+          email: "",
+          address: "",
+          city: "Ranchi",
+          state: "Jharkhand",
+          pinCode: "834001",
+          gstin: "",
+          notes: "",
+        });
+        setNewPatientOpen(false);
+      } else {
+        toast.error(res.error || "Failed to create patient");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred creating patient");
+    } finally {
+      setNewPatientLoading(false);
+    }
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -140,14 +214,37 @@ function NewPrescriptionContent() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Patient Selection & Exam Info */}
           <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">1. Patient & Examination Details</CardTitle>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold">1. Patient & Examination Details</CardTitle>
+                <CardDescription className="text-xs">
+                  Select registered patient or quickly register a new patient directly into database
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setNewPatientOpen(true)}
+                className="text-xs gap-1.5 text-teal-800 border-teal-300 hover:bg-teal-50 shadow-sm"
+              >
+                <UserPlus className="h-3.5 w-3.5" /> + Add New Patient
+              </Button>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5 sm:col-span-1">
-                <Label htmlFor="patientSelect">
-                  Select Patient <span className="text-rose-500">*</span>
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="patientSelect">
+                    Select Patient <span className="text-rose-500">*</span>
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => setNewPatientOpen(true)}
+                    className="text-[11px] text-teal-700 hover:underline font-medium flex items-center gap-0.5"
+                  >
+                    <UserPlus className="h-3 w-3" /> Add New
+                  </button>
+                </div>
                 <select
                   id="patientSelect"
                   className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
@@ -158,10 +255,18 @@ function NewPrescriptionContent() {
                   <option value="">-- Choose Patient --</option>
                   {patients.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.customerCode}) - {p.phone}
+                      {p.name} ({p.customerCode}) - {p.phone || "No Phone"}
                     </option>
                   ))}
                 </select>
+                {patients.find((p) => p.id === selectedCustomerId) && (
+                  <div className="text-[11px] text-slate-500 pt-0.5 flex flex-wrap gap-2">
+                    <span>
+                      📍 {patients.find((p) => p.id === selectedCustomerId)?.city || "Ranchi"},{" "}
+                      {patients.find((p) => p.id === selectedCustomerId)?.state || "Jharkhand"}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -406,6 +511,126 @@ function NewPrescriptionContent() {
             </CardContent>
           </Card>
         </form>
+
+        {/* Quick Add Patient Modal */}
+        <Dialog open={newPatientOpen} onOpenChange={setNewPatientOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-slate-900">
+                <UserPlus className="h-5 w-5 text-teal-700" /> Add New Patient
+              </DialogTitle>
+              <DialogDescription>
+                Register a new patient directly into your database. They will be saved and immediately selected for this prescription.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleCreateNewPatient} className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="rx-new-name">
+                  Full Name <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="rx-new-name"
+                  placeholder="e.g. Ramesh Kumar"
+                  value={newPatientForm.name}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="rx-new-phone">
+                    Phone Number <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input
+                    id="rx-new-phone"
+                    placeholder="+91 98350 12345"
+                    value={newPatientForm.phone}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, phone: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rx-new-email">Email (Optional)</Label>
+                  <Input
+                    id="rx-new-email"
+                    type="email"
+                    placeholder="patient@gmail.com"
+                    value={newPatientForm.email}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, email: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rx-new-addr">Address / Locality (Optional)</Label>
+                <Input
+                  id="rx-new-addr"
+                  placeholder="e.g. Harmu Housing Colony, Argora"
+                  value={newPatientForm.address}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, address: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="rx-new-city">City</Label>
+                  <Input
+                    id="rx-new-city"
+                    value={newPatientForm.city}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, city: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rx-new-state">State</Label>
+                  <Input
+                    id="rx-new-state"
+                    value={newPatientForm.state}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, state: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rx-new-pin">PIN Code</Label>
+                  <Input
+                    id="rx-new-pin"
+                    placeholder="834001"
+                    value={newPatientForm.pinCode}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, pinCode: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rx-new-notes">Medical Notes (Optional)</Label>
+                <Input
+                  id="rx-new-notes"
+                  placeholder="e.g. Diabietic retinopathy screen, previous cataract"
+                  value={newPatientForm.notes}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, notes: e.target.value })}
+                />
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setNewPatientOpen(false)}
+                  disabled={newPatientLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-medium"
+                  disabled={newPatientLoading}
+                >
+                  {newPatientLoading ? "Saving to Database..." : "Save & Select Patient"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppShell>
   );

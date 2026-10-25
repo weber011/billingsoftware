@@ -380,3 +380,47 @@ export const OPTICAL_HSN_REFERENCE = [
     note: "Cleaning accessories and solutions",
   },
 ];
+
+/**
+ * Standard Indian GST State & Union Territory Codes (2-digit)
+ */
+export const GST_STATE_LIST = [
+  { code: "20", name: "Jharkhand (Ranchi)" },
+  { code: "10", name: "Bihar" },
+  { code: "19", name: "West Bengal" },
+  { code: "21", name: "Odisha" },
+  { code: "09", name: "Uttar Pradesh" },
+  { code: "22", name: "Chhattisgarh" },
+  { code: "23", name: "Madhya Pradesh" },
+  { code: "27", name: "Maharashtra" },
+  { code: "07", name: "Delhi" },
+  { code: "29", name: "Karnataka" },
+  { code: "33", name: "Tamil Nadu" },
+  { code: "36", name: "Telangana" },
+  { code: "37", name: "Andhra Pradesh" },
+  { code: "24", name: "Gujarat" },
+  { code: "08", name: "Rajasthan" },
+  { code: "03", name: "Punjab" },
+  { code: "06", name: "Haryana" },
+  { code: "01", name: "Jammu and Kashmir" },
+  { code: "02", name: "Himachal Pradesh" },
+  { code: "05", name: "Uttarakhand" },
+  { code: "04", name: "Chandigarh" },
+  { code: "18", name: "Assam" },
+  { code: "11", name: "Sikkim" },
+  { code: "12", name: "Arunachal Pradesh" },
+  { code: "13", name: "Nagaland" },
+  { code: "14", name: "Manipur" },
+  { code: "15", name: "Mizoram" },
+  { code: "16", name: "Tripura" },
+  { code: "17", name: "Meghalaya" },
+  { code: "30", name: "Goa" },
+  { code: "32", name: "Kerala" },
+  { code: "34", name: "Puducherry" },
+  { code: "38", name: "Ladakh" },
+  { code: "26", name: "Dadra & Nagar Haveli and Daman & Diu" },
+  { code: "35", name: "Andaman & Nicobar Islands" },
+  { code: "31", name: "Lakshadweep" },
+  { code: "97", name: "Other Territory" },
+];
+

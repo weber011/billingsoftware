@@ -9,16 +9,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { createAndFinalizeInvoice } from "@/actions/billing";
-import { getPatients } from "@/actions/patients";
+import { getPatients, createPatient } from "@/actions/patients";
 import { getProducts } from "@/actions/inventory";
 import { getOrderById } from "@/actions/orders";
 import { getBusinessSettings } from "@/actions/settings";
-import { calculateGSTInvoice, LineItemInput } from "@/lib/gst";
+import { calculateGSTInvoice, LineItemInput, GST_STATE_LIST } from "@/lib/gst";
 import { Customer, Product, BusinessSettings } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ArrowLeft, Receipt, Plus, Trash2, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Receipt, Plus, Trash2, CheckCircle2, AlertTriangle, ShieldCheck, UserPlus } from "lucide-react";
 
 function NewInvoiceContent() {
   const router = useRouter();
@@ -32,7 +40,76 @@ function NewInvoiceContent() {
 
   const [selectedCustomerId, setSelectedCustomerId] = useState(customerIdParam || "");
   const [orderId, setOrderId] = useState(orderIdParam || "");
-  const [placeOfSupplyCode, setPlaceOfSupplyCode] = useState("27"); // Maharashtra default
+  const [placeOfSupplyCode, setPlaceOfSupplyCode] = useState("20"); // Jharkhand default (Ranchi)
+  const [isManualPos, setIsManualPos] = useState(false);
+  const [manualPosInput, setManualPosInput] = useState("20");
+
+  // Quick Add Patient Modal state
+  const [newPatientOpen, setNewPatientOpen] = useState(false);
+  const [newPatientLoading, setNewPatientLoading] = useState(false);
+  const [newPatientForm, setNewPatientForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    city: "Ranchi",
+    state: "Jharkhand",
+    pinCode: "834001",
+    gstin: "",
+    notes: "",
+  });
+
+  const handleCreateNewPatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPatientForm.name.trim()) {
+      toast.error("Patient name is required");
+      return;
+    }
+    if (!newPatientForm.phone.trim()) {
+      toast.error("Phone number is required");
+      return;
+    }
+
+    setNewPatientLoading(true);
+    try {
+      const res = await createPatient({
+        name: newPatientForm.name.trim(),
+        phone: newPatientForm.phone.trim(),
+        email: newPatientForm.email?.trim() || undefined,
+        address: newPatientForm.address?.trim() || undefined,
+        city: newPatientForm.city?.trim() || "Ranchi",
+        state: newPatientForm.state?.trim() || "Jharkhand",
+        pinCode: newPatientForm.pinCode?.trim() || undefined,
+        gstin: newPatientForm.gstin?.trim() || undefined,
+        notes: newPatientForm.notes?.trim() || undefined,
+      });
+
+      if (res.success && res.patient) {
+        toast.success(`Patient ${res.patient.name} (${res.patient.customerCode}) registered & saved to database!`);
+        setPatients((prev) => [res.patient as any, ...prev]);
+        setSelectedCustomerId(res.patient.id);
+        setNewPatientForm({
+          name: "",
+          phone: "",
+          email: "",
+          address: "",
+          city: "Ranchi",
+          state: "Jharkhand",
+          pinCode: "834001",
+          gstin: "",
+          notes: "",
+        });
+        setNewPatientOpen(false);
+      } else {
+        toast.error(res.error || "Failed to create patient");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred creating patient");
+    } finally {
+      setNewPatientLoading(false);
+    }
+  };
+
   const [isTaxInclusive, setIsTaxInclusive] = useState(false);
   const [invoiceDiscountAmount, setInvoiceDiscountAmount] = useState<number>(0);
   const [paymentAmount, setPaymentAmount] = useState<string>("");
@@ -155,7 +232,8 @@ function NewInvoiceContent() {
   };
 
   // Live GST Calculation computation
-  const supplierStateCode = businessSettings?.stateCode || "27";
+  const supplierStateCode = businessSettings?.stateCode || "20";
+  const selectedPatient = patients.find((p) => p.id === selectedCustomerId);
   const calcInput: LineItemInput[] = items.map((it) => ({
     description: it.description,
     hsnCode: it.hsnCode,
@@ -238,45 +316,134 @@ function NewInvoiceContent() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Customer & Supply Location */}
           <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">1. Customer & Place of Supply</CardTitle>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold">1. Customer & Place of Supply</CardTitle>
+                <CardDescription className="text-xs">
+                  Select registered patient or quickly register a new patient directly into database
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setNewPatientOpen(true)}
+                className="text-xs gap-1.5 text-teal-800 border-teal-300 hover:bg-teal-50 shadow-sm"
+              >
+                <UserPlus className="h-3.5 w-3.5" /> + Add New Patient
+              </Button>
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5 sm:col-span-1">
-                <Label htmlFor="cust">
-                  Select Customer <span className="text-rose-500">*</span>
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="cust">
+                    Select Customer <span className="text-rose-500">*</span>
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => setNewPatientOpen(true)}
+                    className="text-[11px] text-teal-700 hover:underline font-medium flex items-center gap-0.5"
+                  >
+                    <UserPlus className="h-3 w-3" /> Add New
+                  </button>
+                </div>
                 <select
                   id="cust"
                   className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
                   value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedCustomerId(id);
+                    const p = patients.find((item) => item.id === id);
+                    if (p?.gstin && p.gstin.length >= 2 && /^\d{2}/.test(p.gstin)) {
+                      const code = p.gstin.substring(0, 2);
+                      setPlaceOfSupplyCode(code);
+                      setManualPosInput(code);
+                    }
+                  }}
                   required
                 >
                   <option value="">-- Choose Patient / Customer --</option>
                   {patients.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.customerCode}) - {p.phone}
+                      {p.name} ({p.customerCode}) - {p.phone || "No Phone"}
                     </option>
                   ))}
                 </select>
+                {selectedPatient && (
+                  <div className="text-[11px] text-slate-500 pt-0.5 flex flex-wrap gap-2">
+                    <span>📍 {selectedPatient.city || "Ranchi"}, {selectedPatient.state || "Jharkhand"}</span>
+                    {selectedPatient.gstin && (
+                      <span className="font-mono text-teal-800 font-medium bg-teal-50 px-1 rounded">
+                        GST: {selectedPatient.gstin}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
+              {/* Place of Supply (Dropdown or Manual Input) */}
               <div className="space-y-1.5">
-                <Label htmlFor="pos">Place of Supply (State Code)</Label>
-                <select
-                  id="pos"
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm font-mono"
-                  value={placeOfSupplyCode}
-                  onChange={(e) => setPlaceOfSupplyCode(e.target.value)}
-                >
-                  <option value="27">27 - Maharashtra (Intra-state CGST + SGST)</option>
-                  <option value="29">29 - Karnataka (Inter-state IGST)</option>
-                  <option value="07">07 - Delhi (Inter-state IGST)</option>
-                  <option value="24">24 - Gujarat (Inter-state IGST)</option>
-                  <option value="33">33 - Tamil Nadu (Inter-state IGST)</option>
-                  <option value="36">36 - Telangana (Inter-state IGST)</option>
-                </select>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="pos">Place of Supply (State Code)</Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isManualPos;
+                      setIsManualPos(next);
+                      if (next) setManualPosInput(placeOfSupplyCode);
+                    }}
+                    className="text-[11px] text-teal-700 hover:underline font-medium"
+                  >
+                    {isManualPos ? "Switch to List" : "✏️ Add Manually"}
+                  </button>
+                </div>
+
+                {isManualPos ? (
+                  <div className="space-y-1">
+                    <Input
+                      id="pos-manual"
+                      placeholder="Type State Code (e.g. 20, 10, 27)"
+                      value={manualPosInput}
+                      onChange={(e) => {
+                        const val = e.target.value.trim().toUpperCase();
+                        setManualPosInput(e.target.value);
+                        setPlaceOfSupplyCode(val);
+                      }}
+                      className="font-mono text-sm h-9"
+                      maxLength={30}
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                      <span>Enter 2-digit GST state code or name</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlaceOfSupplyCode("20");
+                          setManualPosInput("20");
+                        }}
+                        className="text-teal-700 hover:underline font-medium"
+                      >
+                        Reset to 20 (Jharkhand)
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    id="pos"
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm font-mono"
+                    value={placeOfSupplyCode}
+                    onChange={(e) => {
+                      setPlaceOfSupplyCode(e.target.value);
+                      setManualPosInput(e.target.value);
+                    }}
+                  >
+                    {GST_STATE_LIST.map((st) => (
+                      <option key={st.code} value={st.code}>
+                        {st.code} - {st.name} {st.code === supplierStateCode ? "(Intra-state CGST + SGST)" : "(Inter-state IGST)"}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -621,6 +788,137 @@ function NewInvoiceContent() {
             </CardContent>
           </Card>
         </form>
+
+        {/* Quick Add Patient Modal */}
+        <Dialog open={newPatientOpen} onOpenChange={setNewPatientOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-slate-900">
+                <UserPlus className="h-5 w-5 text-teal-700" /> Add New Patient
+              </DialogTitle>
+              <DialogDescription>
+                Register a new patient directly into your database. They will be saved and immediately selected for this invoice.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleCreateNewPatient} className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-name">
+                  Full Name <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="new-name"
+                  placeholder="e.g. Ramesh Kumar"
+                  value={newPatientForm.name}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-phone">
+                    Phone Number <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input
+                    id="new-phone"
+                    placeholder="+91 98350 12345"
+                    value={newPatientForm.phone}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, phone: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-email">Email (Optional)</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    placeholder="patient@gmail.com"
+                    value={newPatientForm.email}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, email: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="new-addr">Address / Locality (Optional)</Label>
+                <Input
+                  id="new-addr"
+                  placeholder="e.g. Harmu Housing Colony, Argora"
+                  value={newPatientForm.address}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, address: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-city">City</Label>
+                  <Input
+                    id="new-city"
+                    value={newPatientForm.city}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, city: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-state">State</Label>
+                  <Input
+                    id="new-state"
+                    value={newPatientForm.state}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, state: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-pin">PIN Code</Label>
+                  <Input
+                    id="new-pin"
+                    placeholder="834001"
+                    value={newPatientForm.pinCode}
+                    onChange={(e) => setNewPatientForm({ ...newPatientForm, pinCode: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="new-gstin">GSTIN (Optional, if business entity)</Label>
+                <Input
+                  id="new-gstin"
+                  placeholder="20AAAAA0000A1Z5"
+                  value={newPatientForm.gstin}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, gstin: e.target.value.toUpperCase() })}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="new-notes">Medical / Optical Notes (Optional)</Label>
+                <Input
+                  id="new-notes"
+                  placeholder="e.g. Referred by Dr. Sinha, prefers anti-glare"
+                  value={newPatientForm.notes}
+                  onChange={(e) => setNewPatientForm({ ...newPatientForm, notes: e.target.value })}
+                />
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setNewPatientOpen(false)}
+                  disabled={newPatientLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-medium"
+                  disabled={newPatientLoading}
+                >
+                  {newPatientLoading ? "Saving to Database..." : "Save & Select Patient"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppShell>
   );
