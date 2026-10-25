@@ -1,258 +1,234 @@
 "use server";
 
+import { prisma } from "@/lib/prisma";
 import { safeRevalidatePath } from "@/lib/revalidate";
-import {
-  readCollection,
-  writeCollection,
-  Product,
-  StockMovement,
-  AuditLogEntry,
-  initializeStoreIfEmpty,
-} from "@/lib/store";
 
 export async function getProducts(options?: {
   category?: string;
   searchQuery?: string;
   lowStockOnly?: boolean;
-}): Promise<Product[]> {
-  initializeStoreIfEmpty();
-  let products = readCollection<Product>("products", []);
+}) {
+  const where: any = { isActive: true };
 
   if (options?.category && options.category !== "ALL") {
-    products = products.filter((p) => p.category === options.category);
+    const cat = await prisma.productCategory.findUnique({ where: { slug: options.category.toLowerCase() } });
+    if (cat) where.categoryId = cat.id;
   }
 
   if (options?.lowStockOnly) {
-    products = products.filter((p) => p.trackInventory && p.currentStock <= p.reorderThreshold);
+    where.trackInventory = true;
+    where.currentStock = { lte: prisma.product.fields?.reorderThreshold || 5 };
   }
 
-  if (options?.searchQuery && options.searchQuery.trim() !== "") {
-    const q = options.searchQuery.toLowerCase().trim();
-    products = products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q) ||
-        (p.barcode && p.barcode.includes(q)) ||
-        (p.model && p.model.toLowerCase().includes(q))
-    );
+  if (options?.searchQuery?.trim()) {
+    const q = options.searchQuery.trim();
+    where.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { sku: { contains: q, mode: "insensitive" } },
+      { brand: { contains: q, mode: "insensitive" } },
+    ];
   }
 
-  return products.sort((a, b) => a.name.localeCompare(b.name));
-}
+  const products = await prisma.product.findMany({
+    where: Object.keys(where).length > 1 || where.isActive ? where : undefined,
+    include: { category: true },
+    orderBy: { name: "asc" },
+  });
 
-export async function getProductById(id: string): Promise<{
-  product: Product | null;
-  movements: StockMovement[];
-}> {
-  initializeStoreIfEmpty();
-  const products = readCollection<Product>("products", []);
-  const product = products.find((p) => p.id === id) || null;
-  const allMovements = readCollection<StockMovement>("stock_movements", []);
-  const movements = allMovements
-    .filter((m) => m.productId === id)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  return { product, movements };
+  return products.map((p) => ({
+    id: p.id,
+    sku: p.sku,
+    name: p.name,
+    category: p.category?.name || "Uncategorized",
+    brand: p.brand,
+    model: p.model,
+    barcode: p.barcode,
+    purchaseCost: Number(p.purchaseCost),
+    sellingPrice: Number(p.sellingPrice),
+    hsnCode: p.hsnCode || "9003",
+    gstRate: 12,
+    isVerifiedRate: false,
+    isActive: p.isActive,
+    trackInventory: p.trackInventory,
+    reorderThreshold: p.reorderThreshold,
+    currentStock: p.currentStock,
+    frameShape: p.frameShape,
+    frameMaterial: p.frameMaterial,
+    frameColor: p.frameColor,
+    eyeSize: p.eyeSize,
+    bridgeSize: p.bridgeSize,
+    templeLength: p.templeLength,
+    lensType: p.lensType,
+    lensMaterial: p.lensMaterial,
+    refractiveIndex: p.refractiveIndex,
+    isPhotochromic: p.isPhotochromic,
+    isBlueFilter: p.isBlueFilter,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  }));
 }
 
 export async function createProduct(data: {
   sku: string;
   name: string;
-  category: Product["category"];
-  brand: string;
+  category: string;
+  brand?: string;
   model?: string;
   description?: string;
   barcode?: string;
-  supplierId?: string;
   purchaseCost: number;
   sellingPrice: number;
-  hsnCode: string;
-  gstRate: number;
+  hsnCode?: string;
+  gstRate?: number;
   isVerifiedRate?: boolean;
-  reorderThreshold?: number;
+  currentStock?: number;
   initialStock?: number;
-
-  // Frame
+  reorderThreshold?: number;
   frameShape?: string;
   frameMaterial?: string;
   frameColor?: string;
   eyeSize?: string;
   bridgeSize?: string;
   templeLength?: string;
-
-  // Lens
   lensType?: string;
   lensMaterial?: string;
   refractiveIndex?: string;
   isPhotochromic?: boolean;
   isBlueFilter?: boolean;
-}): Promise<{ success: boolean; product?: Product; error?: string }> {
+}) {
   try {
-    initializeStoreIfEmpty();
-    if (!data.name || data.name.trim() === "") {
-      return { success: false, error: "Product name is required" };
-    }
-    if (!data.sku || data.sku.trim() === "") {
-      return { success: false, error: "SKU is required" };
-    }
+    if (!data.sku?.trim()) return { success: false, error: "SKU is required" };
+    if (!data.name?.trim()) return { success: false, error: "Product name is required" };
 
-    const products = readCollection<Product>("products", []);
-    if (products.some((p) => p.sku.toLowerCase() === data.sku.toLowerCase())) {
-      return { success: false, error: `SKU '${data.sku}' already exists` };
-    }
-
-    const initialStock = Math.max(0, Number(data.initialStock) || 0);
-
-    const newProduct: Product = {
-      id: `prod-${Date.now()}`,
-      sku: data.sku.trim().toUpperCase(),
-      name: data.name.trim(),
-      category: data.category,
-      brand: data.brand.trim(),
-      model: data.model?.trim() || undefined,
-      description: data.description?.trim() || undefined,
-      barcode: data.barcode?.trim() || undefined,
-      supplierId: data.supplierId || undefined,
-      purchaseCost: Math.max(0, Number(data.purchaseCost) || 0),
-      sellingPrice: Math.max(0, Number(data.sellingPrice) || 0),
-      hsnCode: data.hsnCode?.trim() || "9003",
-      gstRate: Number(data.gstRate) || 12,
-      isVerifiedRate: data.isVerifiedRate ?? false,
-      isActive: true,
-      trackInventory: true,
-      reorderThreshold: Math.max(0, Number(data.reorderThreshold) || 5),
-      currentStock: initialStock,
-
-      frameShape: data.frameShape,
-      frameMaterial: data.frameMaterial,
-      frameColor: data.frameColor,
-      eyeSize: data.eyeSize,
-      bridgeSize: data.bridgeSize,
-      templeLength: data.templeLength,
-      lensType: data.lensType,
-      lensMaterial: data.lensMaterial,
-      refractiveIndex: data.refractiveIndex,
-      isPhotochromic: data.isPhotochromic,
-      isBlueFilter: data.isBlueFilter,
-
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    products.push(newProduct);
-    writeCollection("products", products);
-
-    // Initial stock movement record if stock > 0
-    if (initialStock > 0) {
-      const movements = readCollection<StockMovement>("stock_movements", []);
-      movements.push({
-        id: `mov-${Date.now()}`,
-        productId: newProduct.id,
-        productName: newProduct.name,
-        movementType: "INITIAL",
-        quantity: initialStock,
-        previousStock: 0,
-        newStock: initialStock,
-        reason: "Initial inventory setup",
-        performedBy: "Store Manager",
-        createdAt: new Date().toISOString(),
+    // Get or create category
+    const catSlug = (data.category || "frames").toLowerCase().replace(/\s+/g, "-");
+    let category = await prisma.productCategory.findUnique({ where: { slug: catSlug } });
+    if (!category) {
+      category = await prisma.productCategory.create({
+        data: { name: data.category || "Frames", slug: catSlug },
       });
-      writeCollection("stock_movements", movements);
     }
 
-    // Audit log
-    const auditLogs = readCollection<AuditLogEntry>("audit_logs", []);
-    auditLogs.push({
-      id: `audit-${Date.now()}`,
-      eventType: "CREATE",
-      module: "inventory",
-      recordType: "Product",
-      recordId: newProduct.id,
-      description: `Added product ${newProduct.name} (${newProduct.sku}) with ${initialStock} units`,
-      createdAt: new Date().toISOString(),
+    const initialStock = Number(data.initialStock ?? data.currentStock) || 0;
+    const user = await prisma.user.findFirst();
+
+    const product = await prisma.product.create({
+      data: {
+        sku: data.sku.trim(),
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        categoryId: category.id,
+        brand: data.brand?.trim() || null,
+        model: data.model?.trim() || null,
+        barcode: data.barcode?.trim() || null,
+        purchaseCost: data.purchaseCost || 0,
+        sellingPrice: data.sellingPrice || 0,
+        hsnCode: data.hsnCode || "9003",
+        currentStock: initialStock,
+        reorderThreshold: data.reorderThreshold || 5,
+        frameShape: data.frameShape || null,
+        frameMaterial: data.frameMaterial || null,
+        frameColor: data.frameColor || null,
+        eyeSize: data.eyeSize || null,
+        bridgeSize: data.bridgeSize || null,
+        templeLength: data.templeLength || null,
+        lensType: data.lensType || null,
+        lensMaterial: data.lensMaterial || null,
+        refractiveIndex: data.refractiveIndex || null,
+        isPhotochromic: data.isPhotochromic || false,
+        isBlueFilter: data.isBlueFilter || false,
+      },
     });
-    writeCollection("audit_logs", auditLogs);
+
+    // Record initial stock movement
+    if (initialStock > 0) {
+      await prisma.inventoryMovement.create({
+        data: {
+          productId: product.id,
+          movementType: "INITIAL",
+          quantity: initialStock,
+          previousStock: 0,
+          newStock: initialStock,
+          referenceType: "ADJUSTMENT",
+          reason: "Initial stock entry",
+          performedBy: user?.name || "System",
+        },
+      });
+    }
 
     safeRevalidatePath("/inventory");
-    return { success: true, product: newProduct };
+    return { success: true, product: { ...product, purchaseCost: Number(product.purchaseCost), sellingPrice: Number(product.sellingPrice) } };
   } catch (err: any) {
+    if (err.code === "P2002") return { success: false, error: "A product with this SKU already exists" };
     return { success: false, error: err.message || "Failed to create product" };
   }
 }
 
 export async function adjustStock(data: {
   productId: string;
-  adjustmentQty: number; // positive to add, negative to remove
+  adjustment?: number;
+  adjustmentQty?: number;
   reason: string;
-  performedBy?: string;
-}): Promise<{ success: boolean; newStock?: number; error?: string }> {
+  movementType?: string;
+}) {
   try {
-    initializeStoreIfEmpty();
-    if (!data.productId) return { success: false, error: "Product is required" };
-    if (!data.reason || data.reason.trim() === "") {
-      return { success: false, error: "Reason for stock adjustment is required for audit trail" };
-    }
+    const product = await prisma.product.findUnique({ where: { id: data.productId } });
+    if (!product) return { success: false, error: "Product not found" };
 
-    const products = readCollection<Product>("products", []);
-    const index = products.findIndex((p) => p.id === data.productId);
-    if (index === -1) return { success: false, error: "Product not found" };
-
-    const product = products[index];
-    const previousStock = product.currentStock;
-    const newStock = previousStock + data.adjustmentQty;
-
+    const adj = Number(data.adjustment ?? data.adjustmentQty ?? 0);
+    const newStock = product.currentStock + adj;
     if (newStock < 0) {
-      return {
-        success: false,
-        error: `Adjustment would cause negative inventory (${newStock}). Current available stock is ${previousStock}.`,
-      };
+      return { success: false, error: `Insufficient stock. Current: ${product.currentStock}, Requested: ${adj}` };
     }
 
-    product.currentStock = newStock;
-    product.updatedAt = new Date().toISOString();
-    products[index] = product;
-    writeCollection("products", products);
+    const user = await prisma.user.findFirst();
 
-    // Record stock movement ledger
-    const movements = readCollection<StockMovement>("stock_movements", []);
-    movements.push({
-      id: `mov-${Date.now()}`,
-      productId: product.id,
-      productName: product.name,
-      movementType: "ADJUSTMENT",
-      quantity: data.adjustmentQty,
-      previousStock,
-      newStock,
-      referenceType: "ADJUSTMENT",
-      reason: data.reason.trim(),
-      performedBy: data.performedBy || "Store Manager",
-      createdAt: new Date().toISOString(),
-    });
-    writeCollection("stock_movements", movements);
-
-    // Audit log
-    const auditLogs = readCollection<AuditLogEntry>("audit_logs", []);
-    auditLogs.push({
-      id: `audit-${Date.now()}`,
-      eventType: "ADJUST_STOCK",
-      module: "inventory",
-      recordType: "Product",
-      recordId: product.id,
-      description: `Adjusted stock for ${product.name} by ${data.adjustmentQty} (New: ${newStock}). Reason: ${data.reason}`,
-      createdAt: new Date().toISOString(),
-    });
-    writeCollection("audit_logs", auditLogs);
+    await prisma.$transaction([
+      prisma.product.update({
+        where: { id: data.productId },
+        data: { currentStock: newStock },
+      }),
+      prisma.inventoryMovement.create({
+        data: {
+          productId: data.productId,
+          movementType: data.movementType || (adj > 0 ? "PURCHASE_IN" : "ADJUSTMENT"),
+          quantity: adj,
+          previousStock: product.currentStock,
+          newStock,
+          referenceType: "ADJUSTMENT",
+          reason: data.reason || "Manual stock adjustment",
+          performedBy: user?.name || "System",
+        },
+      }),
+    ]);
 
     safeRevalidatePath("/inventory");
-    return { success: true, newStock };
+    return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to adjust stock" };
   }
 }
 
-export async function getStockMovements(): Promise<StockMovement[]> {
-  initializeStoreIfEmpty();
-  const movements = readCollection<StockMovement>("stock_movements", []);
-  return movements.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+export async function getStockMovements(productId?: string) {
+  const where = productId ? { productId } : undefined;
+  const movements = await prisma.inventoryMovement.findMany({
+    where,
+    include: { product: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+
+  return movements.map((m) => ({
+    id: m.id,
+    productId: m.productId,
+    productName: m.product.name,
+    movementType: m.movementType,
+    quantity: m.quantity,
+    previousStock: m.previousStock,
+    newStock: m.newStock,
+    referenceType: m.referenceType,
+    reason: m.reason,
+    performedBy: m.performedBy,
+    createdAt: m.createdAt.toISOString(),
+  }));
 }

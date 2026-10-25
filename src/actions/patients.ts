@@ -1,78 +1,112 @@
 "use server";
 
+import { prisma } from "@/lib/prisma";
 import { safeRevalidatePath } from "@/lib/revalidate";
-import {
-  readCollection,
-  writeCollection,
-  Customer,
-  BusinessSettings,
-  AuditLogEntry,
-  initializeStoreIfEmpty,
-  Prescription,
-  OpticalOrder,
-  Invoice,
-  Payment,
-} from "@/lib/store";
 
-export async function getPatients(searchQuery?: string): Promise<Customer[]> {
-  initializeStoreIfEmpty();
-  const patients = readCollection<Customer>("customers", []);
-  if (!searchQuery || searchQuery.trim() === "") {
-    return patients.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }
+export async function getPatients(searchQuery?: string) {
+  const where = searchQuery && searchQuery.trim() !== ""
+    ? {
+        OR: [
+          { name: { contains: searchQuery, mode: "insensitive" as const } },
+          { customerCode: { contains: searchQuery, mode: "insensitive" as const } },
+          { phone: { contains: searchQuery } },
+          { email: { contains: searchQuery, mode: "insensitive" as const } },
+        ],
+      }
+    : undefined;
 
-  const q = searchQuery.toLowerCase().trim();
-  return patients
-    .filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.customerCode.toLowerCase().includes(q) ||
-        (p.phone && p.phone.includes(q)) ||
-        (p.email && p.email.toLowerCase().includes(q))
-    )
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return prisma.customer.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+  });
 }
 
-export async function getPatientById(id: string): Promise<{
-  patient: Customer | null;
-  prescriptions: Prescription[];
-  orders: OpticalOrder[];
-  invoices: Invoice[];
-  payments: Payment[];
-}> {
-  initializeStoreIfEmpty();
-  const patients = readCollection<Customer>("customers", []);
-  const patient = patients.find((p) => p.id === id) || null;
+export async function getPatientById(id: string) {
+  const patient = await prisma.customer.findUnique({
+    where: { id },
+    include: {
+      prescriptions: { orderBy: { createdAt: "desc" } },
+      orders: { orderBy: { createdAt: "desc" }, include: { items: true } },
+      invoices: { orderBy: { createdAt: "desc" }, include: { items: true, payments: true } },
+      payments: { orderBy: { createdAt: "desc" }, include: { invoice: true } },
+    },
+  });
 
   if (!patient) {
-    return {
-      patient: null,
-      prescriptions: [],
-      orders: [],
-      invoices: [],
-      payments: [],
-    };
+    return { patient: null, prescriptions: [], orders: [], invoices: [], payments: [] };
   }
 
-  const allPrescriptions = readCollection<Prescription>("prescriptions", []);
-  const allOrders = readCollection<OpticalOrder>("orders", []);
-  const allInvoices = readCollection<Invoice>("invoices", []);
-  const allPayments = readCollection<Payment>("payments", []);
-
   return {
-    patient,
-    prescriptions: allPrescriptions
-      .filter((rx) => rx.customerId === id)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    orders: allOrders
-      .filter((o) => o.customerId === id)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    invoices: allInvoices
-      .filter((inv) => inv.customerId === id)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    payments: allPayments
-      .filter((pay) => pay.customerId === id)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    patient: {
+      ...patient,
+      createdAt: patient.createdAt.toISOString(),
+      updatedAt: patient.updatedAt.toISOString(),
+    },
+    prescriptions: patient.prescriptions.map((rx) => ({
+      ...rx,
+      rightSph: rx.rightSph?.toString(),
+      rightCyl: rx.rightCyl?.toString(),
+      rightCyl2: undefined,
+      rightAxis: rx.rightAxis,
+      rightAdd: rx.rightAdd?.toString(),
+      rightVa: rx.rightVa,
+      rightPrism: rx.rightPrism?.toString(),
+      rightBase: rx.rightBase,
+      leftSph: rx.leftSph?.toString(),
+      leftCyl: rx.leftCyl?.toString(),
+      leftAxis: rx.leftAxis,
+      leftAdd: rx.leftAdd?.toString(),
+      leftVa: rx.leftVa,
+      leftPrism: rx.leftPrism?.toString(),
+      leftBase: rx.leftBase,
+      pd: rx.pd ? Number(rx.pd) : undefined,
+      pdRight: rx.pdRight ? Number(rx.pdRight) : undefined,
+      pdLeft: rx.pdLeft ? Number(rx.pdLeft) : undefined,
+      examinationDate: rx.examinationDate.toISOString().substring(0, 10),
+      createdAt: rx.createdAt.toISOString(),
+      customerName: patient.name,
+    })),
+    orders: patient.orders.map((o) => ({
+      ...o,
+      totalAmount: Number(o.totalAmount),
+      advancePaid: Number(o.advancePaid),
+      balanceDue: Number(o.balanceDue),
+      orderDate: o.orderDate.toISOString(),
+      createdAt: o.createdAt.toISOString(),
+      customerName: patient.name,
+      items: o.items.map((it) => ({
+        ...it,
+        unitPrice: Number(it.unitPrice),
+        discount: Number(it.discount),
+        totalPrice: Number(it.totalPrice),
+      })),
+    })),
+    invoices: patient.invoices.map((inv) => ({
+      ...inv,
+      invoiceDate: inv.invoiceDate.toISOString(),
+      subtotal: Number(inv.subtotal),
+      discountAmount: Number(inv.discountAmount),
+      taxableAmount: Number(inv.taxableAmount),
+      cgstTotal: Number(inv.cgstTotal),
+      sgstTotal: Number(inv.sgstTotal),
+      igstTotal: Number(inv.igstTotal),
+      totalTax: Number(inv.totalTax),
+      grandTotal: Number(inv.grandTotal),
+      roundOff: Number(inv.roundOff),
+      finalAmount: Number(inv.finalAmount),
+      amountPaid: Number(inv.amountPaid),
+      balanceDue: Number(inv.balanceDue),
+      createdAt: inv.createdAt.toISOString(),
+      customerName: patient.name,
+    })),
+    payments: patient.payments.map((p) => ({
+      ...p,
+      invoiceNumber: p.invoice?.invoiceNumber || "-",
+      amount: Number(p.amount),
+      paymentDate: p.paymentDate.toISOString(),
+      createdAt: p.createdAt.toISOString(),
+      customerName: patient.name,
+    })),
   };
 }
 
@@ -87,110 +121,63 @@ export async function createPatient(data: {
   pinCode?: string;
   gstin?: string;
   notes?: string;
-}): Promise<{ success: boolean; patient?: Customer; error?: string }> {
+}) {
   try {
-    initializeStoreIfEmpty();
-    if (!data.name || data.name.trim() === "") {
-      return { success: false, error: "Patient name is required" };
+    if (!data.name?.trim()) return { success: false, error: "Patient name is required" };
+    if (!data.phone?.trim()) return { success: false, error: "Phone number is required" };
+
+    // Generate sequential customer code
+    const lastCustomer = await prisma.customer.findFirst({ orderBy: { customerCode: "desc" } });
+    let nextNum = 501;
+    if (lastCustomer?.customerCode) {
+      const match = lastCustomer.customerCode.match(/\d+$/);
+      if (match) nextNum = parseInt(match[0]) + 1;
     }
-    if (!data.phone || data.phone.trim() === "") {
-      return { success: false, error: "Phone number is required for identification" };
-    }
+    const customerCode = `PT-${nextNum}`;
 
-    const patients = readCollection<Customer>("customers", []);
-    const settings = readCollection<BusinessSettings>("business_settings")[0];
-
-    const nextNum = settings?.patientNextNumber || 501;
-    const prefix = settings?.patientPrefix || "PT";
-    const customerCode = `${prefix}-${nextNum}`;
-
-    // Update settings with next patient number
-    if (settings) {
-      settings.patientNextNumber = nextNum + 1;
-      writeCollection("business_settings", [settings]);
-    }
-
-    const newPatient: Customer = {
-      id: `cust-${Date.now()}`,
-      customerCode,
-      name: data.name.trim(),
-      phone: data.phone.trim(),
-      email: data.email?.trim() || undefined,
-      dateOfBirth: data.dateOfBirth || undefined,
-      address: data.address?.trim() || undefined,
-      city: data.city?.trim() || undefined,
-      state: data.state?.trim() || undefined,
-      pinCode: data.pinCode?.trim() || undefined,
-      gstin: data.gstin?.trim() || undefined,
-      notes: data.notes?.trim() || undefined,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    patients.push(newPatient);
-    writeCollection("customers", patients);
-
-    // Audit log
-    const auditLogs = readCollection<AuditLogEntry>("audit_logs", []);
-    auditLogs.push({
-      id: `audit-${Date.now()}`,
-      eventType: "CREATE",
-      module: "patients",
-      recordType: "Customer",
-      recordId: newPatient.id,
-      description: `Registered patient ${newPatient.name} (${newPatient.customerCode})`,
-      createdAt: new Date().toISOString(),
+    const patient = await prisma.customer.create({
+      data: {
+        customerCode,
+        name: data.name.trim(),
+        phone: data.phone.trim(),
+        email: data.email?.trim() || null,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+        address: data.address?.trim() || null,
+        city: data.city?.trim() || "Ranchi",
+        state: data.state?.trim() || "Jharkhand",
+        pinCode: data.pinCode?.trim() || null,
+        gstin: data.gstin?.trim() || null,
+        notes: data.notes?.trim() || null,
+      },
     });
-    writeCollection("audit_logs", auditLogs);
 
     safeRevalidatePath("/patients");
-    return { success: true, patient: newPatient };
+    return { success: true, patient };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to register patient" };
   }
 }
 
-export async function updatePatient(
-  id: string,
-  data: Partial<Customer>
-): Promise<{ success: boolean; patient?: Customer; error?: string }> {
+export async function updatePatient(id: string, data: Record<string, any>) {
   try {
-    initializeStoreIfEmpty();
-    const patients = readCollection<Customer>("customers", []);
-    const index = patients.findIndex((p) => p.id === id);
-    if (index === -1) {
-      return { success: false, error: "Patient not found" };
-    }
-
-    const existing = patients[index];
-    const updated: Customer = {
-      ...existing,
-      ...data,
-      id: existing.id,
-      customerCode: existing.customerCode, // Immutable identifier
-      updatedAt: new Date().toISOString(),
-    };
-
-    patients[index] = updated;
-    writeCollection("customers", patients);
-
-    // Audit log
-    const auditLogs = readCollection<AuditLogEntry>("audit_logs", []);
-    auditLogs.push({
-      id: `audit-${Date.now()}`,
-      eventType: "UPDATE",
-      module: "patients",
-      recordType: "Customer",
-      recordId: id,
-      description: `Updated profile for patient ${updated.name} (${updated.customerCode})`,
-      createdAt: new Date().toISOString(),
+    const patient = await prisma.customer.update({
+      where: { id },
+      data: {
+        name: data.name,
+        phone: data.phone,
+        email: data.email || null,
+        address: data.address || null,
+        city: data.city || null,
+        state: data.state || null,
+        pinCode: data.pinCode || null,
+        gstin: data.gstin || null,
+        notes: data.notes || null,
+      },
     });
-    writeCollection("audit_logs", auditLogs);
 
     safeRevalidatePath("/patients");
     safeRevalidatePath(`/patients/${id}`);
-    return { success: true, patient: updated };
+    return { success: true, patient };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to update patient" };
   }

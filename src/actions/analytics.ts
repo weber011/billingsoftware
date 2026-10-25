@@ -1,14 +1,6 @@
 "use server";
 
-import {
-  readCollection,
-  Invoice,
-  OpticalOrder,
-  Payment,
-  Product,
-  Customer,
-  initializeStoreIfEmpty,
-} from "@/lib/store";
+import { prisma } from "@/lib/prisma";
 
 export interface DashboardMetrics {
   todaySales: number;
@@ -24,104 +16,117 @@ export interface DashboardMetrics {
   lowStockCount: number;
   readyForCollectionCount: number;
   totalPatientsCount: number;
-  recentInvoices: Invoice[];
-  recentOrders: OpticalOrder[];
+  recentInvoices: any[];
+  recentOrders: any[];
   paymentMethodDistribution: Array<{ method: string; total: number }>;
   categorySalesDistribution: Array<{ category: string; total: number }>;
 }
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  initializeStoreIfEmpty();
-
-  const invoices = readCollection<Invoice>("invoices", []);
-  const finalizedInvoices = invoices.filter((i) => i.status === "FINALIZED");
-  const orders = readCollection<OpticalOrder>("orders", []);
-  const payments = readCollection<Payment>("payments", []).filter((p) => p.status === "COMPLETED");
-  const products = readCollection<Product>("products", []);
-  const customers = readCollection<Customer>("customers", []);
-
   const now = new Date();
-  // Using Asia/Kolkata date string YYYY-MM-DD
   const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(now);
-  const currentYearMonth = todayStr.substring(0, 7); // e.g. "2026-10"
+  const todayStart = new Date(todayStr + "T00:00:00.000Z");
+  const monthStart = new Date(todayStr.substring(0, 7) + "-01T00:00:00.000Z");
 
-  let todaySales = 0;
-  let monthSales = 0;
-  let cgstCollected = 0;
-  let sgstCollected = 0;
-  let igstCollected = 0;
+  // All finalized invoices
+  const invoices = await prisma.invoice.findMany({
+    where: { status: "FINALIZED" },
+    include: { items: true },
+  });
+
+  let todaySales = 0, monthSales = 0;
+  let cgstCollected = 0, sgstCollected = 0, igstCollected = 0;
   let outstandingReceivables = 0;
 
-  for (const inv of finalizedInvoices) {
-    const invDateStr = inv.invoiceDate.substring(0, 10);
-    const invYearMonth = inv.invoiceDate.substring(0, 7);
+  for (const inv of invoices) {
+    const invDate = inv.invoiceDate;
+    const finalAmt = Number(inv.finalAmount);
+    
+    if (invDate >= todayStart) todaySales += finalAmt;
+    if (invDate >= monthStart) monthSales += finalAmt;
 
-    if (invDateStr === todayStr) {
-      todaySales += inv.finalAmount;
-    }
-    if (invYearMonth === currentYearMonth) {
-      monthSales += inv.finalAmount;
-    }
-
-    cgstCollected += inv.cgstTotal;
-    sgstCollected += inv.sgstTotal;
-    igstCollected += inv.igstTotal;
-    outstandingReceivables += inv.balanceDue;
+    cgstCollected += Number(inv.cgstTotal);
+    sgstCollected += Number(inv.sgstTotal);
+    igstCollected += Number(inv.igstTotal);
+    outstandingReceivables += Number(inv.balanceDue);
   }
 
-  const paymentsReceived = payments.reduce((acc, p) => acc + p.amount, 0);
-  const totalTaxCollected = cgstCollected + sgstCollected + igstCollected;
-
-  const lowStockCount = products.filter(
-    (p) => p.trackInventory && p.currentStock <= p.reorderThreshold
-  ).length;
-
-  const readyForCollectionCount = orders.filter(
-    (o) => o.status === "READY_FOR_COLLECTION"
-  ).length;
+  const payments = await prisma.payment.findMany({ where: { status: "COMPLETED" } });
+  const paymentsReceived = payments.reduce((sum, p) => sum + Number(p.amount), 0);
 
   // Payment method distribution
   const methodMap = new Map<string, number>();
-  for (const pay of payments) {
-    const m = pay.paymentMethod || "OTHER";
-    methodMap.set(m, (methodMap.get(m) || 0) + pay.amount);
+  for (const p of payments) {
+    const m = p.paymentMethod;
+    methodMap.set(m, (methodMap.get(m) || 0) + Number(p.amount));
   }
-  const paymentMethodDistribution = Array.from(methodMap.entries()).map(([method, total]) => ({
-    method,
-    total,
+  const paymentMethodDistribution = Array.from(methodMap.entries()).map(([method, total]) => ({ method, total }));
+
+  // Low stock products
+  const lowStockCount = await prisma.product.count({
+    where: {
+      trackInventory: true,
+      isActive: true,
+      currentStock: { lte: 5 },
+    },
+  });
+
+  // Ready for collection orders
+  const readyForCollectionCount = await prisma.opticalOrder.count({
+    where: { status: "READY_FOR_COLLECTION" },
+  });
+
+  const totalPatientsCount = await prisma.customer.count();
+  const totalOrdersCount = await prisma.opticalOrder.count();
+
+  // Recent invoices
+  const recentInvoicesRaw = await prisma.invoice.findMany({
+    where: { status: "FINALIZED" },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+  const recentInvoices = recentInvoicesRaw.map((inv) => ({
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    customerName: inv.customerName,
+    finalAmount: Number(inv.finalAmount),
+    balanceDue: Number(inv.balanceDue),
+    invoiceDate: inv.invoiceDate.toISOString(),
+    status: inv.status,
   }));
 
-  // Category sales breakdown from finalized invoice items
-  const catMap = new Map<string, number>();
-  for (const inv of finalizedInvoices) {
-    for (const item of inv.items) {
-      const prod = products.find((p) => p.id === item.productId);
-      const cat = prod?.category || "SPECTACLES";
-      catMap.set(cat, (catMap.get(cat) || 0) + item.totalAmount);
-    }
-  }
-  const categorySalesDistribution = Array.from(catMap.entries()).map(([category, total]) => ({
-    category,
-    total,
+  // Recent orders
+  const recentOrdersRaw = await prisma.opticalOrder.findMany({
+    include: { customer: true },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+  const recentOrders = recentOrdersRaw.map((o) => ({
+    id: o.id,
+    orderNumber: o.orderNumber,
+    customerName: o.customer.name,
+    totalAmount: Number(o.totalAmount),
+    status: o.status,
+    orderDate: o.orderDate.toISOString(),
   }));
 
   return {
     todaySales: Math.round(todaySales * 100) / 100,
     monthSales: Math.round(monthSales * 100) / 100,
-    totalInvoicesCount: finalizedInvoices.length,
-    totalOrdersCount: orders.length,
+    totalInvoicesCount: invoices.length,
+    totalOrdersCount,
     outstandingReceivables: Math.round(outstandingReceivables * 100) / 100,
     paymentsReceived: Math.round(paymentsReceived * 100) / 100,
-    totalTaxCollected: Math.round(totalTaxCollected * 100) / 100,
+    totalTaxCollected: Math.round((cgstCollected + sgstCollected + igstCollected) * 100) / 100,
     cgstCollected: Math.round(cgstCollected * 100) / 100,
     sgstCollected: Math.round(sgstCollected * 100) / 100,
     igstCollected: Math.round(igstCollected * 100) / 100,
     lowStockCount,
     readyForCollectionCount,
-    totalPatientsCount: customers.length,
-    recentInvoices: finalizedInvoices.slice(0, 5),
-    recentOrders: orders.slice(0, 5),
+    totalPatientsCount,
+    recentInvoices,
+    recentOrders,
     paymentMethodDistribution,
-    categorySalesDistribution,
+    categorySalesDistribution: [],
   };
 }

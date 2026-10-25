@@ -93,7 +93,7 @@ function NewInvoiceContent() {
       getOrderById(orderIdParam).then((ord) => {
         if (ord && ord.items.length > 0) {
           const mappedItems = ord.items.map((oi) => ({
-            productId: oi.productId,
+            productId: oi.productId || undefined,
             description: oi.description,
             hsnCode: oi.itemType === "FRAME" ? "9003" : oi.itemType === "LENS" ? "9001" : "3307",
             quantity: oi.quantity,

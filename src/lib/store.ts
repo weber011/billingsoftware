@@ -115,72 +115,72 @@ export interface Customer {
   id: string;
   customerCode: string; // PT-0001
   name: string;
-  phone: string;
-  email?: string;
-  dateOfBirth?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  pinCode?: string;
-  gstin?: string;
-  notes?: string;
+  phone?: string | null;
+  email?: string | null;
+  dateOfBirth?: string | Date | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pinCode?: string | null;
+  gstin?: string | null;
+  notes?: string | null;
   isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
 }
 
 export interface Prescription {
   id: string;
   prescriptionCode: string; // RX-0001
   customerId: string;
-  customerName?: string;
-  examinationDate: string;
-  prescribedBy: string;
-  prescriptionType: "SPECTACLE" | "CONTACT_LENS" | "BOTH";
+  customerName?: string | null;
+  examinationDate: string | Date;
+  prescribedBy?: string | null;
+  prescriptionType: "SPECTACLE" | "CONTACT_LENS" | "BOTH" | string;
   
   // Right Eye (OD)
-  rightSph?: string;
-  rightCyl?: string;
-  rightAxis?: number;
-  rightAdd?: string;
-  rightVa?: string;
-  rightPrism?: string;
-  rightBase?: string;
+  rightSph?: string | null;
+  rightCyl?: string | null;
+  rightAxis?: number | null;
+  rightAdd?: string | null;
+  rightVa?: string | null;
+  rightPrism?: string | null;
+  rightBase?: string | null;
 
   // Left Eye (OS)
-  leftSph?: string;
-  leftCyl?: string;
-  leftAxis?: number;
-  leftAdd?: string;
-  leftVa?: string;
-  leftPrism?: string;
-  leftBase?: string;
+  leftSph?: string | null;
+  leftCyl?: string | null;
+  leftAxis?: number | null;
+  leftAdd?: string | null;
+  leftVa?: string | null;
+  leftPrism?: string | null;
+  leftBase?: string | null;
 
   // Measurement
-  pd?: number;
-  pdRight?: number;
-  pdLeft?: number;
-  nearVisionDetails?: string;
-  distanceVisionDetails?: string;
-  lensRecommendation?: string;
-  notes?: string;
-  nextExaminationDate?: string;
+  pd?: number | null;
+  pdRight?: number | null;
+  pdLeft?: number | null;
+  nearVisionDetails?: string | null;
+  distanceVisionDetails?: string | null;
+  lensRecommendation?: string | null;
+  notes?: string | null;
+  nextExaminationDate?: string | Date | null;
   
-  createdById: string;
-  createdByName: string;
-  createdAt: string;
+  createdById?: string | null;
+  createdByName?: string | null;
+  createdAt: string | Date;
 }
 
 export interface Product {
   id: string;
   sku: string;
   name: string;
-  category: "FRAME" | "LENS" | "SUNGLASSES" | "CONTACT_LENS" | "ACCESSORY" | "SERVICE";
-  brand: string;
-  model?: string;
-  description?: string;
-  barcode?: string;
-  supplierId?: string;
+  category: "FRAME" | "LENS" | "SUNGLASSES" | "CONTACT_LENS" | "ACCESSORY" | "SERVICE" | string;
+  brand?: string | null;
+  model?: string | null;
+  description?: string | null;
+  barcode?: string | null;
+  supplierId?: string | null;
   purchaseCost: number;
   sellingPrice: number;
   hsnCode: string;
@@ -192,19 +192,19 @@ export interface Product {
   currentStock: number;
 
   // Specifics
-  frameShape?: string;
-  frameMaterial?: string;
-  frameColor?: string;
-  eyeSize?: string;
-  bridgeSize?: string;
-  templeLength?: string;
-  lensType?: string;
-  lensMaterial?: string;
-  refractiveIndex?: string;
-  isPhotochromic?: boolean;
-  isBlueFilter?: boolean;
-  createdAt: string;
-  updatedAt: string;
+  frameShape?: string | null;
+  frameMaterial?: string | null;
+  frameColor?: string | null;
+  eyeSize?: string | null;
+  bridgeSize?: string | null;
+  templeLength?: string | null;
+  lensType?: string | null;
+  lensMaterial?: string | null;
+  refractiveIndex?: string | null;
+  isPhotochromic?: boolean | null;
+  isBlueFilter?: boolean | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
 }
 
 export interface StockMovement {
@@ -227,11 +227,11 @@ export interface OpticalOrder {
   orderNumber: string; // ORD-0001
   customerId: string;
   customerName: string;
-  customerPhone?: string;
-  prescriptionId?: string;
-  prescriptionSnapshot?: Partial<Prescription>;
-  orderDate: string;
-  expectedCompletionDate?: string;
+  customerPhone?: string | null;
+  prescriptionId?: string | null;
+  prescriptionSnapshot?: any;
+  orderDate: string | Date;
+  expectedCompletionDate?: string | Date | null;
   status:
     | "PRESCRIPTION_RECORDED"
     | "ORDER_CONFIRMED"
@@ -241,15 +241,16 @@ export interface OpticalOrder {
     | "QUALITY_CHECK"
     | "READY_FOR_COLLECTION"
     | "DELIVERED"
-    | "CANCELLED";
-  assignedToName?: string;
-  labInfo?: string;
-  fittingDetails?: string;
+    | "CANCELLED"
+    | string;
+  assignedToName?: string | null;
+  labInfo?: string | null;
+  fittingDetails?: string | null;
   items: Array<{
     id: string;
-    productId?: string;
+    productId?: string | null;
     description: string;
-    itemType: "FRAME" | "LENS" | "ACCESSORY" | "SERVICE";
+    itemType: "FRAME" | "LENS" | "ACCESSORY" | "SERVICE" | string;
     quantity: number;
     unitPrice: number;
     discount: number;
@@ -258,10 +259,10 @@ export interface OpticalOrder {
   totalAmount: number;
   advancePaid: number;
   balanceDue: number;
-  internalNotes?: string;
-  invoiceId?: string;
-  createdAt: string;
-  updatedAt: string;
+  internalNotes?: string | null;
+  invoiceId?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
 }
 
 export interface Invoice {
@@ -270,17 +271,17 @@ export interface Invoice {
   invoiceDate: string;
   customerId: string;
   customerName: string;
-  customerPhone?: string;
-  customerAddress?: string;
-  customerGstin?: string;
-  orderId?: string;
-  status: "DRAFT" | "FINALIZED" | "CANCELLED";
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  customerGstin?: string | null;
+  orderId?: string | null;
+  status: "DRAFT" | "FINALIZED" | "CANCELLED" | string;
   
   // Tax & Supply Details
-  placeOfSupply: string;
-  placeOfSupplyCode: string;
-  isInterState: boolean;
-  isTaxInclusive: boolean;
+  placeOfSupply?: string | null;
+  placeOfSupplyCode?: string | null;
+  isInterState?: boolean;
+  isTaxInclusive?: boolean;
   
   // Financial Breakdowns
   subtotal: number;
@@ -298,7 +299,7 @@ export interface Invoice {
 
   items: Array<{
     id: string;
-    productId?: string;
+    productId?: string | null;
     description: string;
     hsnCode: string;
     quantity: number;
@@ -306,7 +307,7 @@ export interface Invoice {
     discount: number;
     taxableAmount: number;
     gstRate: number;
-    isVerifiedRate: boolean;
+    isVerifiedRate?: boolean;
     cgstAmount: number;
     sgstAmount: number;
     igstAmount: number;
@@ -321,15 +322,16 @@ export interface Invoice {
     sgstAmount: number;
     igstAmount: number;
     totalTax: number;
-    hasUnverifiedRate: boolean;
+    hasUnverifiedRate?: boolean;
   }>;
 
-  notes?: string;
-  finalizedAt?: string;
-  finalizedBy?: string;
-  cancelledAt?: string;
-  cancelledBy?: string;
-  cancelReason?: string;
+  notes?: string | null;
+  finalizedAt?: string | null;
+  finalizedBy?: string | null;
+  cancelledAt?: string | null;
+  cancelledBy?: string | null;
+  cancelReason?: string | null;
+  cancellationReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }

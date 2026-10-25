@@ -40,7 +40,7 @@ export default async function OrderDetailPage({
     revalidatePath(`/orders/${order.id}`);
   };
 
-  const rx = order.prescriptionSnapshot;
+  const rx = order.prescriptionSnapshot as any;
 
   return (
     <AppShell>
@@ -143,7 +143,7 @@ export default async function OrderDetailPage({
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Glasses className="h-4 w-4 text-teal-700" /> Preserved Prescription Snapshot ({rx.prescriptionCode})
+                <Glasses className="h-4 w-4 text-teal-700" /> Preserved Prescription Snapshot {rx.prescriptionCode ? `(${rx.prescriptionCode})` : ""}
               </CardTitle>
               <CardDescription className="text-xs">
                 Immutable clinical measurements preserved when this order was placed
