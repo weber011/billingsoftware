@@ -75,58 +75,18 @@ export default async function OrdersListPage({
                 No orders found under this status filter.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order #</TableHead>
-                    <TableHead>Patient Name</TableHead>
-                    <TableHead>Order Date</TableHead>
-                    <TableHead>Expected Delivery</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Advance Paid</TableHead>
-                    <TableHead>Balance Due</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                {/* Mobile Cards View (Visible on phones) */}
+                <div className="block md:hidden space-y-3">
                   {orders.map((ord) => (
-                    <TableRow key={ord.id} className="hover:bg-slate-50/80">
-                      <TableCell className="font-mono text-xs font-semibold text-teal-800">
-                        {ord.orderNumber}
-                      </TableCell>
-                      <TableCell className="font-medium text-slate-900 text-xs">
-                        <Link href={`/patients/${ord.customerId}`} className="hover:underline text-teal-900 font-semibold">
-                          {ord.customerName}
-                        </Link>
-                        {ord.customerPhone && (
-                          <p className="text-[10px] text-slate-400">{ord.customerPhone}</p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-500 font-mono">
-                        {formatDate(ord.orderDate)}
-                      </TableCell>
-                      <TableCell className="text-xs font-medium text-slate-800">
-                        {ord.expectedCompletionDate ? formatDate(ord.expectedCompletionDate) : "Standard (3 days)"}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 max-w-xs truncate">
-                        {ord.items.map((i) => i.description).join(" + ")}
-                      </TableCell>
-                      <TableCell className="text-xs font-bold text-slate-900 font-mono">
-                        {formatCurrency(ord.totalAmount)}
-                      </TableCell>
-                      <TableCell className="text-xs text-emerald-700 font-medium font-mono">
-                        {formatCurrency(ord.advancePaid)}
-                      </TableCell>
-                      <TableCell className="text-xs font-semibold font-mono">
-                        {ord.balanceDue > 0 ? (
-                          <span className="text-amber-700">{formatCurrency(ord.balanceDue)}</span>
-                        ) : (
-                          <span className="text-emerald-700">Nil</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
+                    <div
+                      key={ord.id}
+                      className="p-3.5 rounded-lg border bg-slate-50/60 space-y-2.5 text-xs shadow-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-teal-800 text-xs px-2 py-0.5 rounded bg-teal-50 border border-teal-200">
+                          {ord.orderNumber}
+                        </span>
                         <Badge
                           variant={
                             ord.status === "DELIVERED"
@@ -141,18 +101,132 @@ export default async function OrdersListPage({
                         >
                           {ord.status.replace(/_/g, " ")}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
+                      </div>
+
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <Link href={`/patients/${ord.customerId}`} className="font-bold text-slate-900 text-sm hover:underline">
+                            {ord.customerName}
+                          </Link>
+                          {ord.customerPhone && (
+                            <p className="text-[11px] text-slate-500">{ord.customerPhone}</p>
+                          )}
+                          <p className="text-[11px] text-slate-600 line-clamp-1 mt-0.5">
+                            👓 {ord.items.map((i) => i.description).join(" + ")}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-mono font-bold text-slate-900 text-sm">
+                            {formatCurrency(ord.totalAmount)}
+                          </p>
+                          {ord.balanceDue > 0 ? (
+                            <span className="text-[10px] text-amber-700 font-semibold block">
+                              Due: {formatCurrency(ord.balanceDue)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-emerald-700 font-semibold block">
+                              Paid in full
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Date: {formatDate(ord.orderDate)}
+                        </span>
                         <Link href={`/orders/${ord.id}`}>
-                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-                            <Eye className="h-3.5 w-3.5" /> Details
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 font-medium bg-white">
+                            <Eye className="h-3.5 w-3.5" /> Order Details
                           </Button>
                         </Link>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+
+                {/* Desktop & Tablet Table */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Order #</TableHead>
+                        <TableHead>Patient Name</TableHead>
+                        <TableHead>Order Date</TableHead>
+                        <TableHead>Expected Delivery</TableHead>
+                        <TableHead>Items</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Advance Paid</TableHead>
+                        <TableHead>Balance Due</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orders.map((ord) => (
+                        <TableRow key={ord.id} className="hover:bg-slate-50/80">
+                          <TableCell className="font-mono text-xs font-semibold text-teal-800">
+                            {ord.orderNumber}
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-900 text-xs">
+                            <Link href={`/patients/${ord.customerId}`} className="hover:underline text-teal-900 font-semibold">
+                              {ord.customerName}
+                            </Link>
+                            {ord.customerPhone && (
+                              <p className="text-[10px] text-slate-400">{ord.customerPhone}</p>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500 font-mono">
+                            {formatDate(ord.orderDate)}
+                          </TableCell>
+                          <TableCell className="text-xs font-medium text-slate-800">
+                            {ord.expectedCompletionDate ? formatDate(ord.expectedCompletionDate) : "Standard (3 days)"}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600 max-w-xs truncate">
+                            {ord.items.map((i) => i.description).join(" + ")}
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-slate-900 font-mono">
+                            {formatCurrency(ord.totalAmount)}
+                          </TableCell>
+                          <TableCell className="text-xs text-emerald-700 font-medium font-mono">
+                            {formatCurrency(ord.advancePaid)}
+                          </TableCell>
+                          <TableCell className="text-xs font-semibold font-mono">
+                            {ord.balanceDue > 0 ? (
+                              <span className="text-amber-700">{formatCurrency(ord.balanceDue)}</span>
+                            ) : (
+                              <span className="text-emerald-700">Nil</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                ord.status === "DELIVERED"
+                                  ? "success"
+                                  : ord.status === "READY_FOR_COLLECTION"
+                                  ? "info"
+                                  : ord.status === "PAYMENT_PENDING"
+                                  ? "warning"
+                                  : "secondary"
+                              }
+                              className="text-[10px]"
+                            >
+                              {ord.status.replace(/_/g, " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link href={`/orders/${ord.id}`}>
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                                <Eye className="h-3.5 w-3.5" /> Details
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

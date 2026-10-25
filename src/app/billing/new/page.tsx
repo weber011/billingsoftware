@@ -484,12 +484,24 @@ function NewInvoiceContent() {
                 {items.map((it, idx) => (
                   <div
                     key={idx}
-                    className="p-3 rounded-lg border bg-slate-50/50 flex flex-col md:flex-row items-start md:items-center gap-2 text-xs"
+                    className="p-3.5 rounded-lg border bg-slate-50/70 space-y-2.5 text-xs transition-shadow hover:shadow-sm"
                   >
-                    <div className="flex-1 space-y-1 w-full">
+                    {/* Item Description & Catalog Select */}
+                    <div className="space-y-1.5 w-full">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[11px] font-semibold text-slate-700">Item #{idx + 1}</Label>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          className="md:hidden text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1 text-[11px] py-0.5 px-1.5 rounded active:bg-rose-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
+                        </button>
+                      </div>
                       <Input
-                        placeholder="Item Description"
+                        placeholder="Item Description (e.g. Ray-Ban Aviator, Crizal Lens)"
                         value={it.description}
+                        className="bg-white text-xs h-9"
                         onChange={(e) => {
                           const val = e.target.value;
                           setItems((prev) => {
@@ -500,7 +512,7 @@ function NewInvoiceContent() {
                         }}
                       />
                       <select
-                        className="w-full h-7 rounded border border-input bg-white px-2 text-[11px]"
+                        className="w-full h-8 rounded border border-input bg-white px-2 text-[11px] text-slate-600 truncate"
                         onChange={(e) => handleSelectProduct(idx, e.target.value)}
                         value={it.productId || ""}
                       >
@@ -513,103 +525,116 @@ function NewInvoiceContent() {
                       </select>
                     </div>
 
-                    <div className="w-20">
-                      <Label className="text-[10px] text-slate-400">HSN Code</Label>
-                      <Input
-                        value={it.hsnCode}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setItems((prev) => {
-                            const c = [...prev];
-                            c[idx].hsnCode = val;
-                            return c;
-                          });
-                        }}
-                      />
-                    </div>
+                    {/* Numeric Input Controls: Responsive Grid on Mobile, Flex on Desktop */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 md:flex md:items-end gap-2 pt-1 border-t border-slate-200/60">
+                      <div className="w-full md:w-20">
+                        <Label className="text-[10px] text-slate-500 font-medium">HSN Code</Label>
+                        <Input
+                          value={it.hsnCode}
+                          className="bg-white h-8 text-xs font-mono"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setItems((prev) => {
+                              const c = [...prev];
+                              c[idx].hsnCode = val;
+                              return c;
+                            });
+                          }}
+                        />
+                      </div>
 
-                    <div className="w-16">
-                      <Label className="text-[10px] text-slate-400">Qty</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        value={it.quantity}
-                        onChange={(e) => {
-                          const val = Number(e.target.value) || 1;
-                          setItems((prev) => {
-                            const c = [...prev];
-                            c[idx].quantity = val;
-                            return c;
-                          });
-                        }}
-                      />
-                    </div>
+                      <div className="w-full md:w-16">
+                        <Label className="text-[10px] text-slate-500 font-medium">Qty</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={it.quantity}
+                          className="bg-white h-8 text-xs"
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 1;
+                            setItems((prev) => {
+                              const c = [...prev];
+                              c[idx].quantity = val;
+                              return c;
+                            });
+                          }}
+                        />
+                      </div>
 
-                    <div className="w-24">
-                      <Label className="text-[10px] text-slate-400">Unit Price (₹)</Label>
-                      <Input
-                        type="number"
-                        value={it.unitPrice}
-                        onChange={(e) => {
-                          const val = Number(e.target.value) || 0;
-                          setItems((prev) => {
-                            const c = [...prev];
-                            c[idx].unitPrice = val;
-                            return c;
-                          });
-                        }}
-                      />
-                    </div>
+                      <div className="w-full md:w-24">
+                        <Label className="text-[10px] text-slate-500 font-medium">Unit Price (₹)</Label>
+                        <Input
+                          type="number"
+                          value={it.unitPrice}
+                          className="bg-white h-8 text-xs font-mono"
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            setItems((prev) => {
+                              const c = [...prev];
+                              c[idx].unitPrice = val;
+                              return c;
+                            });
+                          }}
+                        />
+                      </div>
 
-                    <div className="w-20">
-                      <Label className="text-[10px] text-slate-400">Disc (₹)</Label>
-                      <Input
-                        type="number"
-                        value={it.discountAmount}
-                        onChange={(e) => {
-                          const val = Number(e.target.value) || 0;
-                          setItems((prev) => {
-                            const c = [...prev];
-                            c[idx].discountAmount = val;
-                            return c;
-                          });
-                        }}
-                      />
-                    </div>
+                      <div className="w-full md:w-20">
+                        <Label className="text-[10px] text-slate-500 font-medium">Disc (₹)</Label>
+                        <Input
+                          type="number"
+                          value={it.discountAmount}
+                          className="bg-white h-8 text-xs font-mono"
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            setItems((prev) => {
+                              const c = [...prev];
+                              c[idx].discountAmount = val;
+                              return c;
+                            });
+                          }}
+                        />
+                      </div>
 
-                    <div className="w-20">
-                      <Label className="text-[10px] text-slate-400">GST %</Label>
-                      <select
-                        className="w-full h-9 rounded border border-input bg-white px-1 text-xs font-mono"
-                        value={it.gstRate}
-                        onChange={(e) => {
-                          const val = Number(e.target.value) || 0;
-                          setItems((prev) => {
-                            const c = [...prev];
-                            c[idx].gstRate = val;
-                            return c;
-                          });
-                        }}
-                      >
-                        <option value="0">0%</option>
-                        <option value="5">5%</option>
-                        <option value="12">12%</option>
-                        <option value="18">18%</option>
-                        <option value="28">28%</option>
-                      </select>
-                    </div>
+                      <div className="w-full md:w-20">
+                        <Label className="text-[10px] text-slate-500 font-medium">GST Rate</Label>
+                        <select
+                          className="w-full h-8 rounded border border-input bg-white px-1 text-xs font-mono"
+                          value={it.gstRate}
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            setItems((prev) => {
+                              const c = [...prev];
+                              c[idx].gstRate = val;
+                              return c;
+                            });
+                          }}
+                        >
+                          <option value="0">0%</option>
+                          <option value="5">5%</option>
+                          <option value="12">12%</option>
+                          <option value="18">18%</option>
+                          <option value="28">28%</option>
+                        </select>
+                      </div>
 
-                    <div className="w-24 text-right pt-3 font-mono font-bold text-slate-900">
-                      {formatCurrency(calcResult.items[idx]?.totalAmount || 0)}
+                      {/* Row Total & Delete on Desktop */}
+                      <div className="col-span-2 sm:col-span-5 md:flex-1 flex items-center justify-between md:justify-end gap-3 pt-1 md:pt-0">
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block md:hidden">Line Total</span>
+                          <span className="font-mono font-bold text-slate-900 text-sm">
+                            {formatCurrency(calcResult.items[idx]?.totalAmount || 0)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          className="hidden md:inline-flex p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors"
+                          title="Delete Item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => removeItem(idx)}
-                      className="text-slate-400 hover:text-rose-600 pt-3"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
                   </div>
                 ))}
               </div>

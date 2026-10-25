@@ -32,7 +32,7 @@ export default async function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">Store Dashboard</h1>
             <p className="text-sm text-slate-500">
-              Live operational metrics & GST billing overview for LensArt Flagship
+              Live operational metrics & GST billing overview for LensArt Ranchi Store (Jharkhand)
             </p>
           </div>
           <div className="flex items-center gap-2">

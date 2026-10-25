@@ -80,72 +80,133 @@ export default async function PatientsPage({
                 No patients found matching your search.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-24">ID</TableHead>
-                    <TableHead>Patient Name</TableHead>
-                    <TableHead>Contact Phone</TableHead>
-                    <TableHead>City / Address</TableHead>
-                    <TableHead>Registered On</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <>
+                {/* Mobile Cards View (Visible on phones) */}
+                <div className="block md:hidden space-y-3">
                   {patients.map((patient) => (
-                    <TableRow key={patient.id} className="hover:bg-slate-50/80">
-                      <TableCell className="font-mono text-xs font-semibold text-teal-800">
-                        {patient.customerCode}
-                      </TableCell>
-                      <TableCell className="font-medium text-slate-900">
-                        <Link
-                          href={`/patients/${patient.id}`}
-                          className="hover:underline text-teal-900 font-semibold"
-                        >
-                          {patient.name}
-                        </Link>
-                        {patient.notes && (
-                          <p className="text-[11px] text-slate-400 truncate max-w-xs">
-                            {patient.notes}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600">
-                        <span className="flex items-center gap-1">
-                          <Phone className="h-3 w-3 text-slate-400" />
-                          {patient.phone}
+                    <div
+                      key={patient.id}
+                      className="p-3.5 rounded-lg border bg-slate-50/60 space-y-2.5 text-xs shadow-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-teal-800 text-xs px-2 py-0.5 rounded bg-teal-50 border border-teal-200">
+                          {patient.customerCode}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600">
-                        {patient.city || patient.address ? (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-slate-400" />
-                            {patient.city || patient.address}
-                          </span>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-500">
-                        {formatDate(patient.createdAt)}
-                      </TableCell>
-                      <TableCell>
                         <Badge variant={patient.isActive ? "success" : "secondary"} className="text-[10px]">
                           {patient.isActive ? "Active" : "Archived"}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
+                      </div>
+
+                      <div>
+                        <Link
+                          href={`/patients/${patient.id}`}
+                          className="font-bold text-slate-900 text-sm hover:underline"
+                        >
+                          {patient.name}
+                        </Link>
+                        {patient.phone && (
+                          <div className="mt-1">
+                            <a
+                              href={`tel:${patient.phone}`}
+                              className="inline-flex items-center gap-1.5 text-teal-700 font-medium text-xs hover:underline"
+                            >
+                              <Phone className="h-3 w-3" />
+                              {patient.phone}
+                            </a>
+                          </div>
+                        )}
+                        {(patient.city || patient.address) && (
+                          <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                            <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{patient.city || patient.address}</span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Reg: {formatDate(patient.createdAt)}
+                        </span>
                         <Link href={`/patients/${patient.id}`}>
-                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 font-medium bg-white">
                             <Eye className="h-3.5 w-3.5" /> View Profile
                           </Button>
                         </Link>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
+                </div>
+
+                {/* Desktop & Tablet Table */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-24">ID</TableHead>
+                        <TableHead>Patient Name</TableHead>
+                        <TableHead>Contact Phone</TableHead>
+                        <TableHead>City / Address</TableHead>
+                        <TableHead>Registered On</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {patients.map((patient) => (
+                        <TableRow key={patient.id} className="hover:bg-slate-50/80">
+                          <TableCell className="font-mono text-xs font-semibold text-teal-800">
+                            {patient.customerCode}
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-900">
+                            <Link
+                              href={`/patients/${patient.id}`}
+                              className="hover:underline text-teal-900 font-semibold"
+                            >
+                              {patient.name}
+                            </Link>
+                            {patient.notes && (
+                              <p className="text-[11px] text-slate-400 truncate max-w-xs">
+                                {patient.notes}
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600">
+                            <span className="flex items-center gap-1">
+                              <Phone className="h-3 w-3 text-slate-400" />
+                              {patient.phone}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600">
+                            {patient.city || patient.address ? (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-slate-400" />
+                                {patient.city || patient.address}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500">
+                            {formatDate(patient.createdAt)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={patient.isActive ? "success" : "secondary"} className="text-[10px]">
+                              {patient.isActive ? "Active" : "Archived"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link href={`/patients/${patient.id}`}>
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                                <Eye className="h-3.5 w-3.5" /> View Profile
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
